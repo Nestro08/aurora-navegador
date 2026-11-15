@@ -29,15 +29,12 @@ class PantallaArranque(QWidget):
         self.fundido.finished.connect(self.close)
 
     def mostrar(self):
-        pantalla = QApplication.primaryScreen().geometry()
-        if QApplication.platformName().startswith("wayland"):
-            self.setGeometry(pantalla)  # Wayland no deja colocar ventanas: se ocupa la pantalla y se centra dentro
-            self.showFullScreen()
-        else:
-            r = QRect(QPoint(0, 0), self.TARJETA)
-            r.moveCenter(pantalla.center())
-            self.setGeometry(r)
-            self.show()
+        # Solo la tarjeta. En X11 y Windows se centra aquí; en Wayland la coloca el compositor (GNOME la centra con
+        # «center-new-windows»). Nada de pantalla completa: GNOME pone fondo negro detrás de esas ventanas.
+        r = QRect(QPoint(0, 0), self.TARJETA)
+        r.moveCenter(QApplication.primaryScreen().availableGeometry().center())
+        self.setGeometry(r)
+        self.show()
         animar(self.anim, 0.0, 1.0)
         self.reloj.start()
 
