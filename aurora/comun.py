@@ -6,6 +6,7 @@ import html
 import json
 import os
 import re
+import secrets
 import sys
 import threading
 from datetime import datetime
@@ -43,6 +44,10 @@ from PyQt6.QtWidgets import (QInputDialog, QSizeGrip, QSplitter, QTextBrowser,
 NOMBRE = "Aurora"
 DATOS = Path.home() / ".aurora"
 DATOS.mkdir(exist_ok=True)
+if os.name == "posix":  # historial, contraseñas y ajustes: solo los puede leer tu usuario
+    os.chmod(DATOS, 0o700)
+# Secreto de esta sesión para los mensajes de los scripts de Aurora (las webs no pueden falsificarlos)
+TOKEN_PUENTE = secrets.token_hex(12)
 NUEVA = DATOS / "nueva.html"
 NUEVA_URL = QUrl.fromLocalFile(str(NUEVA)).toString()
 
@@ -316,10 +321,26 @@ class Almacen:
         except (OSError, ValueError):
             self.datos = defecto
 
+    pendientes = set()
+
     def guardar(self):
+        Almacen.pendientes.discard(self)
         temporal = self.ruta.with_suffix(".tmp")
         temporal.write_text(json.dumps(self.datos, ensure_ascii=False, indent=1), encoding="utf-8")
+        if os.name == "posix":
+            os.chmod(temporal, 0o600)
         os.replace(temporal, self.ruta)  # escritura atómica: nunca queda un JSON a medias
+
+    def guardar_luego(self, ms=2000):
+        """Agrupa escrituras frecuentes (p. ej. el historial en cada carga) en una sola."""
+        if self not in Almacen.pendientes:
+            Almacen.pendientes.add(self)
+            QTimer.singleShot(ms, lambda: self.guardar() if self in Almacen.pendientes else None)
+
+    @classmethod
+    def volcar_pendientes(cls):
+        for almacen in list(cls.pendientes):
+            almacen.guardar()
 
 
 class AlmacenMemoria(Almacen):
@@ -329,4 +350,7 @@ class AlmacenMemoria(Almacen):
         self.ruta, self.datos = None, defecto
 
     def guardar(self):
+        pass
+
+    def guardar_luego(self, ms=2000):
         pass

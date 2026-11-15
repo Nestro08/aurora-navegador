@@ -22,7 +22,8 @@ El script instala Aurora para tu usuario, sin tocar el sistema salvo dos o tres 
 - Para desinstalar: `bash desinstalar-fedora.sh`.
 
 En Linux las contraseñas se cifran con AES. La clave se guarda en el **llavero del sistema** (GNOME
-Keyring o KWallet), que se desbloquea al iniciar sesión.
+Keyring o KWallet), que se desbloquea al iniciar sesión. Si no hay llavero, Aurora te avisa de que se
+guardan **sin cifrar** (*Ajustes → Contraseñas*) hasta que instales `keyring` y `cryptography`.
 
 ## Empezar en Windows
 
@@ -54,17 +55,18 @@ pestaña nueva en la ventana que tienes. Acepta URLs y archivos como argumentos 
 | Pestañas | Animadas, se reordenan arrastrando, **fijadas**, **grupos de colores con nombre** que se pliegan, indicador de sonido y silenciar (Ctrl+M), **dormir pestañas** inactivas para ahorrar memoria, **pantalla dividida** (Ctrl+Shift+D), menú con clic derecho |
 | Navegación | Paleta de comandos (Ctrl+K), página de inicio animada con accesos, buscar en la página (Ctrl+F), **modo lectura** (F9), **vídeo flotante** (Ctrl+Shift+V), gestor de **descargas** con progreso, pausa y reanudación |
 | Privacidad | Bloqueador de anuncios y rastreadores, Do Not Track y GPC, bloquear cookies de terceros, **ventana de incógnito** (Ctrl+Shift+N), **perfiles** separados (Personal, Uni…) |
-| Contraseñas | Guarda y rellena; **generador** al registrarte; cifradas (llavero de GNOME/KDE en Linux, DPAPI en Windows); **contraseña maestra** o **Windows Hello** para verlas; importar el CSV de Chrome o Edge |
+| Contraseñas | Guarda y rellena; **generador** al registrarte; cifradas (llavero de GNOME/KDE en Linux, DPAPI en Windows); **contraseña maestra** o **Windows Hello** para verlas, copiarlas o rellenarlas; importar el CSV de Chrome o Edge. Los scripts de contraseñas corren aislados de la web: ninguna página puede espiarlos ni fingir que has escrito una contraseña |
 | Desarrolladores (F12) | Inspector de Chromium, consola JS, registro de red, **cliente de API** tipo Postman, **auditoría** (accesibilidad, SEO, rendimiento, seguridad, enlaces rotos), modo responsive, User-Agent, CSS en vivo, servidor local con recarga en vivo, **cuentagotas y medidor** (Ctrl+Shift+X), **captura de página completa**, visor de JSON |
-| Sincronización | Accesos, historial y contraseñas entre tus PCs (Windows y Linux) a través de una carpeta de OneDrive, Dropbox, Syncthing… Las contraseñas viajan cifradas con AES y una frase de paso |
-| Extensiones | Userscripts `.user.js` (compatibles con Tampermonkey), estilos `.user.css` y extensiones en Python con API propia. Incluye 4 de ejemplo |
+| Sincronización | Accesos, historial y contraseñas entre tus PCs (Windows y Linux) a través de una carpeta de OneDrive, Dropbox, Syncthing… Con una frase de paso, las contraseñas y el historial viajan cifrados con AES |
+| Extensiones | Userscripts `.user.js` (compatibles con Tampermonkey), estilos `.user.css` y extensiones en Python con API propia (solo se ejecutan si las apruebas). Incluye 4 de ejemplo |
 | Asistente IA (Ctrl+Shift+A) | Resume, traduce y explica la página o lo que selecciones, con respuestas en tiempo real. Funciona con Claude (clave de API) o cualquier proveedor compatible con OpenAI, incluido **Ollama** (gratis y en tu PC) |
 | Ajustes (Ctrl+,) | General, Apariencia (7 colores de acento), Privacidad, Contraseñas, Historial, Accesos, Descargas, Perfiles, Sincronización, Extensiones, Asistente IA, Desarrolladores |
 
 ## Dónde se guardan tus datos
 
 En la carpeta `.aurora` de tu usuario (`~/.aurora` en Linux, `C:\Users\<tú>\.aurora` en Windows). La carpeta `perfiles\` contiene los perfiles extra y `extensiones\` las
-extensiones. No se borra al desinstalar.
+extensiones. No se borra al desinstalar. En Linux la carpeta y sus archivos solo los puede leer tu usuario
+(permisos 700/600).
 
 ## Escribir una extensión
 
@@ -89,6 +91,11 @@ def activar(aurora):
 También vale copiar un archivo `.user.js` o `.user.css` directamente en la carpeta. Luego pulsa
 *Ajustes → Extensiones → Recargar*.
 
+Las extensiones con Python ejecutan código con tus permisos, así que **no se activan solas**: la primera vez
+que las enciendes en *Ajustes → Extensiones* Aurora te pide permiso y guarda una huella (SHA-256) de su código.
+Si el código cambia, vuelve a pedírtelo. Los archivos del manifest (`js`, `css`, `python`) tienen que estar
+dentro de la carpeta de la extensión.
+
 ## Estructura del código
 
 ```
@@ -111,7 +118,19 @@ aurora/
   ajustes.py · estilo.py   pantalla de ajustes y hoja de estilo
 herramientas/           icono y versión del .exe
 instalador/aurora.iss   instalador de Inno Setup
+tests/                  pruebas (pytest)
 ```
+
+## Pruebas
+
+```bash
+pip install -r requirements.txt pytest
+python -m pytest tests
+```
+
+Funcionan sin pantalla (Qt en modo `offscreen`) y con un HOME temporal: no tocan tu `~/.aurora` ni tu
+llavero. Incluyen un Chromium real para comprobar que las webs no pueden falsificar ni espiar el puente de
+contraseñas.
 
 ## Límites conocidos
 

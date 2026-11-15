@@ -33,15 +33,21 @@ def _avisar_instancia(urls):
 def _escuchar(app):
     QLocalServer.removeServer(SERVIDOR)
     servidor = QLocalServer(app)
+    servidor.setSocketOptions(QLocalServer.SocketOption.UserAccessOption)  # otros usuarios no pueden conectarse
     servidor.listen(SERVIDOR)
 
     def conexion():
         s = servidor.nextPendingConnection()
+        recibido = bytearray()
 
         def leer():
+            recibido.extend(bytes(s.readAll()))
             try:
-                urls = json.loads(bytes(s.readAll()).decode("utf-8"))
-            except ValueError:
+                urls = json.loads(recibido.decode("utf-8"))
+            except ValueError:  # aún no ha llegado todo el mensaje
+                return
+            recibido.clear()
+            if not isinstance(urls, list) or not all(isinstance(u, str) for u in urls):
                 return
             v = gestor().ventana_activa()
             if urls == ["__incognito__"]:
@@ -101,5 +107,6 @@ def main():
     fijar_acento(perfil.ajustes.datos["acento"])
     app.setStyleSheet(hoja_estilo())
     servidor = _escuchar(app)  # noqa: F841  (se mantiene vivo mientras dure la app)
+    app.aboutToQuit.connect(Almacen.volcar_pendientes)
     gestor().nueva_ventana(urls=urls, incognito=incognito)
     sys.exit(app.exec())

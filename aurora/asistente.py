@@ -150,8 +150,7 @@ class PanelAsistente(QWidget):
         l.addLayout(rejilla)
         self.chat = QTextBrowser(objectName="chatIA")
         self.chat.setOpenLinks(False)
-        self.chat.anchorClicked.connect(lambda u: self.v.abrir_ajustes(Ajustes_SECCION_IA()) if u.scheme() == "aurora"
-                                        else self.v.nueva_pestana(u.toString()))
+        self.chat.anchorClicked.connect(self._enlace)
         l.addWidget(self.chat, 1)
         fila = QHBoxLayout()
         self.entrada = QPlainTextEdit(placeholderText="Pregunta lo que quieras sobre esta página…  (Enter envía)")
@@ -163,6 +162,12 @@ class PanelAsistente(QWidget):
         fila.addWidget(self.b_enviar, 0, Qt.AlignmentFlag.AlignBottom)
         l.addLayout(fila)
         self.pintar()
+
+    def _enlace(self, u):
+        if u.scheme() == "aurora":
+            self.v.abrir_ajustes(Ajustes_SECCION_IA())
+        elif u.scheme() in ("http", "https"):  # nada de file:, javascript:… que venga en una respuesta
+            self.v.nueva_pestana(u.toString())
 
     # ─────────────────────────────── abrir/cerrar
     def alternar(self):

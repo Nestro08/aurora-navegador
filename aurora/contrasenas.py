@@ -12,6 +12,12 @@ from .desarrollo import *  # noqa: F401,F403
 
 CIFRADO_REAL = sys.platform == "win32"  # en Linux se decide al usar el llavero (ver cifrado_disponible)
 
+# Los scripts de contraseñas corren en un mundo de JavaScript aislado: la web no ve sus variables ni puede
+# leer el token, así que no puede fingir mensajes de «contraseña escrita» ni espiar lo que Aurora rellena.
+MUNDO_AURORA = QWebEngineScript.ScriptWorldId.ApplicationWorld
+MSG_PW = f"__aurora_pw_{TOKEN_PUENTE}__"
+MSG_GEN = f"__aurora_gen_{TOKEN_PUENTE}__"
+
 JS_CAPTURA = r"""(()=>{if(window.__aurora_pw)return;window.__aurora_pw=1;let ultimo='';
 const ss=(k,v)=>{try{return v===undefined?sessionStorage.getItem(k):sessionStorage.setItem(k,v)}catch(e){return null}};
 const visibles=s=>[...document.querySelectorAll(s)].filter(i=>i.offsetParent!==null||i.type==='hidden');
@@ -21,7 +27,7 @@ const usuario=p=>{const ins=[...document.querySelectorAll('input')].filter(i=>/^
 const mirar=()=>{const p=[...document.querySelectorAll('input[type=password]')].find(i=>i.value);
  if(!p){const e=visibles('input[type=email],input[autocomplete=username],input[name*=user i],input[name*=login i]').find(i=>i.value);
   if(e)ss('__aurora_u',e.value.trim());return}
- const d=JSON.stringify({u:usuario(p),p:p.value});if(d===ultimo)return;ultimo=d;console.log('__aurora_pw__'+d)};
+ const d=JSON.stringify({u:usuario(p),p:p.value});if(d===ultimo)return;ultimo=d;console.log(%%MSG_PW%%+d)};
 document.addEventListener('submit',mirar,true);
 document.addEventListener('click',e=>{if(e.target.closest&&e.target.closest('button,input[type=submit],input[type=button],[role=button],a'))mirar()},true);
 document.addEventListener('keydown',e=>{if(e.key==='Enter')mirar()},true);
@@ -31,8 +37,9 @@ document.addEventListener('focusin',e=>{const i=e.target;
  const f=i.form||document;const n=f.querySelectorAll('input[type=password]').length;
  const txt=(((f.innerText||'')+' '+location.href).toLowerCase()).slice(0,4000);
  if(i.autocomplete==='new-password'||n>=2||/regist|sign.?up|crear.{0,12}cuenta|create.{0,12}account|únete|join now|nueva contraseña|new password/.test(txt)){
-  i.__aurora_g=1;console.log('__aurora_gen__')}},true);
-})()"""
+  i.__aurora_g=1;console.log(%%MSG_GEN%%)}},true);
+})()""".replace("%%MSG_PW%%", json.dumps(MSG_PW)).replace(
+    "%%MSG_GEN%%", json.dumps(MSG_GEN))
 
 JS_PONER_GENERADA = r"""((p)=>{const a=document.activeElement;const f=(a&&a.form)||document;
 const ins=[...f.querySelectorAll('input[type=password]')].filter(i=>i.offsetParent!==null);
@@ -40,7 +47,8 @@ const s=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set;
 ins.forEach(i=>{s.call(i,p);i.dispatchEvent(new Event('input',{bubbles:true}));i.dispatchEvent(new Event('change',{bubbles:true}));
 i.style.transition='background-color .6s';i.style.backgroundColor='rgba(%%A_RGB%%,.16)'});return ins.length})(%s)"""
 
-JS_RELLENAR = r"""((u,p)=>{const vis=i=>i.offsetParent!==null;
+JS_RELLENAR = r"""((u,p,o)=>{if(location.origin!==o&&location.origin!==o.replace(/:(80|443)$/,''))return -1;
+const vis=i=>i.offsetParent!==null;
 const poner=(el,v)=>{const s=Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set;s.call(el,v);
  el.dispatchEvent(new Event('input',{bubbles:true}));el.dispatchEvent(new Event('change',{bubbles:true}));
  el.style.transition='background-color .6s';el.style.backgroundColor='rgba(%%A_RGB%%,.16)'};
@@ -49,7 +57,7 @@ const textos=[...document.querySelectorAll('input')].filter(i=>/^(text|email|tel
 if(pw.length){const p0=pw[0];poner(p0,p);const antes=textos.filter(i=>i.compareDocumentPosition(p0)&Node.DOCUMENT_POSITION_FOLLOWING);
  const uf=antes.pop();if(uf&&u&&(!uf.value||uf.value===u))poner(uf,u);return 1}
 const uf=textos.find(i=>/user|mail|login|correo|usuario|identifier/i.test(i.name+i.id+i.autocomplete+i.type));
-if(uf&&u&&!uf.value){poner(uf,u);return 2}return 0})(%s,%s)"""
+if(uf&&u&&!uf.value){poner(uf,u);return 2}return 0})(%s,%s,%s)"""
 
 
 def _dpapi(datos, cifrar_):
@@ -160,10 +168,20 @@ class Contrasenas(Almacen):
         return [c for c in self.datos["cuentas"] if c["origen"] == origen]
 
     def clave(self, cuenta):
+        c = self.leer_clave(cuenta)
+        return "" if c is None else c
+
+    @staticmethod
+    def leer_clave(cuenta):
+        """La contraseña en claro, o None si no se puede descifrar (p. ej. llavero bloqueado o de otro PC)."""
         try:
             return descifrar(cuenta["clave"])
         except Exception:
-            return ""
+            return None
+
+    def sin_cifrar(self):
+        """True si alguna contraseña está guardada solo codificada (no hay llavero ni DPAPI)."""
+        return any(c["clave"].startswith("b64:") for c in self.datos["cuentas"])
 
     def estado(self, origen, usuario, clave):
         for c in self.de(origen):

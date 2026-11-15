@@ -59,7 +59,7 @@ class Perfil(QObject):
         script.setName("aurora-contrasenas")
         script.setSourceCode(JS_CAPTURA)
         script.setInjectionPoint(QWebEngineScript.InjectionPoint.DocumentReady)
-        script.setWorldId(QWebEngineScript.ScriptWorldId.MainWorld)
+        script.setWorldId(MUNDO_AURORA)
         script.setRunsOnSubFrames(False)
         self.web.scripts().insert(script)
         self.web.downloadRequested.connect(self._descarga)

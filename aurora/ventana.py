@@ -534,7 +534,8 @@ class Ventana(QMainWindow, MixinOrganizacion, MixinMultimedia, MixinDescargas, M
             return
         self.registrar_historial(pagina.vista)
         pagina.vista.page().runJavaScript(JS_JSON)
-        if self.ajustes.datos["autorrellenar"]:
+        # con la protección activada no se rellena solo: hay que pedirlo con la llave (y verificarse)
+        if self.ajustes.datos["autorrellenar"] and not self.ajustes.datos["proteger_pw"]:
             self.autorrellenar(pagina.vista.page())
         extensiones().notificar_carga(pagina.vista.url().toString())
         if chip is self.chip_activo and self.herr.css.toPlainText().strip():
@@ -686,7 +687,7 @@ class Ventana(QMainWindow, MixinOrganizacion, MixinMultimedia, MixinDescargas, M
         else:
             h.insert(0, {"url": url, "titulo": vista.title(), "fecha": datetime.now().strftime("%d/%m/%Y %H:%M")})
             del h[5000:]
-        self.historial.guardar()
+        self.historial.guardar_luego()
 
     def _estrella(self):
         url = self.vista().url().toString()
@@ -764,10 +765,10 @@ class Ventana(QMainWindow, MixinOrganizacion, MixinMultimedia, MixinDescargas, M
 
     # ────────────────────────────────────────────────────────── herramientas de desarrollo
     def consola_pagina(self, pagina, nivel, mensaje, linea, origen):
-        if mensaje.startswith("__aurora_pw__"):
-            self.contrasena_detectada(pagina, mensaje[len("__aurora_pw__"):])
+        if mensaje.startswith(MSG_PW):
+            self.contrasena_detectada(pagina, mensaje[len(MSG_PW):])
             return
-        if mensaje == "__aurora_gen__":
+        if mensaje == MSG_GEN:
             self.sugerir_contrasena(pagina)
             return
         if not self.chip_activo or pagina is not self.vista().page():
@@ -887,7 +888,7 @@ class Ventana(QMainWindow, MixinOrganizacion, MixinMultimedia, MixinDescargas, M
         self._generadas[Contrasenas.origen(pagina.url())] = clave
         QApplication.clipboard().setText(clave)
         js = JS_PONER_GENERADA.replace("%%A_RGB%%", rgb(T.a1)) % json.dumps(clave)
-        pagina.runJavaScript(js, lambda n: self.aviso.mostrar(
+        pagina.runJavaScript(js, MUNDO_AURORA, lambda n: self.aviso.mostrar(
             "🔑  Contraseña segura puesta y copiada" if n else "Haz clic primero en el campo de contraseña"))
 
     def contrasena_detectada(self, pagina, datos):
@@ -907,13 +908,13 @@ class Ventana(QMainWindow, MixinOrganizacion, MixinMultimedia, MixinDescargas, M
         if self._generadas.get(origen) == clave:  # contraseña que generamos nosotros: se guarda sin preguntar
             self.claves.guardar_cuenta(origen, usuario, clave)
             self._generadas.pop(origen, None)
-            self.aviso.mostrar("🔑  Contraseña nueva guardada")
+            self._aviso_guardada("🔑  Contraseña nueva guardada")
             self._llave()
             return
 
         def guardar():
             self.claves.guardar_cuenta(origen, usuario, clave)
-            self.aviso.mostrar("🔑  Contraseña guardada")
+            self._aviso_guardada("🔑  Contraseña guardada")
             self._llave()
 
         cambiada = estado == "cambiada"
@@ -922,23 +923,49 @@ class Ventana(QMainWindow, MixinOrganizacion, MixinMultimedia, MixinDescargas, M
                               [("Nunca aquí", lambda: self.claves.nunca(origen), False),
                                ("Actualizar" if cambiada else "Guardar", guardar, True)])
 
-    def autorrellenar(self, pagina, cuenta=None, reintento=True):
-        cuentas = self.claves.de(Contrasenas.origen(pagina.url()))
+    def _aviso_guardada(self, texto):
+        if cifrado_disponible() is None:
+            texto = "⚠  Guardada SIN cifrar: no hay llavero del sistema (mira Ajustes → Contraseñas)"
+        self.aviso.mostrar(texto)
+
+    def autorrellenar(self, pagina, cuenta=None, reintento=True, forzar=False):
+        origen = Contrasenas.origen(pagina.url())
+        cuentas = self.claves.de(origen)
         if not cuentas:
             return
+        if not forzar and not origen.startswith(("https://", "http://localhost", "http://127.0.0.1")):
+            return  # en http normal la contraseña viajaría sin cifrar: solo se rellena pidiéndolo
         c = cuenta or cuentas[0]
-        js = JS_RELLENAR.replace("%%A_RGB%%", rgb(T.a1)) % (json.dumps(c["usuario"]),
-                                                               json.dumps(self.claves.clave(c)))
+        clave = self.claves.leer_clave(c)
+        if clave is None:
+            if cuenta:
+                self.aviso.mostrar("No se puede descifrar esta contraseña (¿llavero bloqueado?)")
+            return
+        js = JS_RELLENAR.replace("%%A_RGB%%", rgb(T.a1)) % (json.dumps(c["usuario"]), json.dumps(clave),
+                                                               json.dumps(origen))
 
         def hecho(r):
             if r == 1:
                 self.aviso.mostrar(f"🔑  Rellenado como {c['usuario'] or 'cuenta guardada'}")
+            elif r == -1:  # la página cambió de sitio mientras tanto: no se rellena nada
+                return
             elif reintento and not cuenta:  # webs que pintan el formulario más tarde
-                QTimer.singleShot(1500, lambda: self.autorrellenar(pagina, None, False))
+                QTimer.singleShot(1500, lambda: self._reintentar_relleno(pagina))
             elif cuenta:
                 self.aviso.mostrar("No encuentro el formulario de acceso en esta página")
 
-        pagina.runJavaScript(js, hecho)
+        pagina.runJavaScript(js, MUNDO_AURORA, hecho)
+
+    def _reintentar_relleno(self, pagina):
+        try:
+            self.autorrellenar(pagina, None, False)
+        except RuntimeError:  # la pestaña se cerró antes del reintento
+            pass
+
+    def rellenar_pedido(self, cuenta):
+        """Relleno desde el menú de la llave: con la protección activada pide verificación."""
+        if self.p.verificador.comprobar(self, "rellenar una contraseña"):
+            self.autorrellenar(self.vista().page(), cuenta, forzar=True)
 
     def _llave(self):
         if self.chip_activo:
@@ -950,7 +977,7 @@ class Ventana(QMainWindow, MixinOrganizacion, MixinMultimedia, MixinDescargas, M
         m = menu_bonito(QMenu(self))
         for c in cuentas:
             m.addAction(f"Rellenar como  {c['usuario'] or '(sin usuario)'}",
-                        lambda c=c: self.autorrellenar(self.vista().page(), c))
+                        lambda c=c: self.rellenar_pedido(c))
         m.addSeparator()
         m.addAction("Gestionar contraseñas…", lambda: self.abrir_ajustes(3))
         b = self.omni.llave

@@ -101,7 +101,8 @@ class Tarjeta(QFrame):
 
 def interruptor(valor, al_cambiar):
     sw = Interruptor("", bool(valor))
-    sw.toggled.connect(al_cambiar)
+    if al_cambiar:
+        sw.toggled.connect(al_cambiar)
     return sw
 
 
@@ -972,8 +973,9 @@ class Ajustes(QWidget):
                                                frase.setPlaceholderText("•••••••• (guardada)"))
                                       if frase.text() else None)
         if HAY_CRYPTO:
-            desc = ("Las contraseñas se cifran con AES usando esta frase antes de salir de tu PC. Pon la misma en "
-                    "todos tus dispositivos. Sin frase, las contraseñas no se sincronizan.")
+            desc = ("Las contraseñas y el historial se cifran con AES usando esta frase antes de salir de tu PC. "
+                    "Pon la misma en todos tus dispositivos. Sin frase, las contraseñas no se sincronizan y el "
+                    "historial viaja sin cifrar.")
         else:
             desc = "⚠ Para sincronizar contraseñas instala la librería: pip install cryptography"
         t.fila("Frase de paso para las contraseñas", desc, frase)
@@ -1019,6 +1021,27 @@ class Ajustes(QWidget):
         l.addWidget(botones(("Abrir carpeta", lambda: QDesktopServices.openUrl(QUrl.fromLocalFile(str(CARPETA_EXT)))),
                             ("Recargar", lambda: (ge.recargar(), self.refrescar(), v.aviso.mostrar("🧩  Extensiones recargadas"))),
                             ("Instalar archivo…", instalar)))
+        def cambiar(ext, sw, activa):
+            if activa and ext.sin_permiso:
+                cambio = ge.aprobadas.datos.get(ext.id) is not None
+                r = QMessageBox.warning(
+                    self, "Permitir extensión de Python",
+                    (f"El código de «{ext.nombre}» ha cambiado desde que la aprobaste.\n\n" if cambio else "")
+                    + f"«{ext.nombre}» ejecuta código Python con los mismos permisos que tú: puede leer tus "
+                      f"archivos, tus contraseñas y usar internet.\n\nCarpeta: {ext.carpeta}\n\n"
+                      "Actívala solo si la has escrito tú o confías en quien la hizo. ¿Permitirla?",
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No, QMessageBox.StandardButton.No)
+                if r != QMessageBox.StandardButton.Yes:
+                    sw.blockSignals(True)
+                    sw.setChecked(False)
+                    sw._set(0.0)
+                    sw.blockSignals(False)
+                    return
+                ge.aprobar(ext)
+            ge.cambiar(ext, activa)
+            if ext.error:
+                v.aviso.mostrar(f"⚠  {ext.nombre}: {ext.error}")
+
         t = Tarjeta()
         for ext in ge.lista:
             desc = ext.descripcion
@@ -1026,8 +1049,12 @@ class Ajustes(QWidget):
                 desc += ("\n" if desc else "") + " · ".join(ext.tipos)
             if ext.error:
                 desc += f"\n⚠ {ext.error}"
-            t.fila(f"{ext.nombre}   {ext.version}".strip(), desc,
-                   interruptor(ge.activa(ext), lambda c, e=ext: ge.cambiar(e, c)))
+            elif ext.sin_permiso:
+                desc += ("\n🔒 Su código cambió: actívala para revisarla y aprobarla de nuevo."
+                         if ext.id in ge.aprobadas.datos else "\n🔒 Necesita tu permiso para ejecutar código Python.")
+            sw = interruptor(ge.activa(ext), None)
+            sw.toggled.connect(lambda c, e=ext, s=sw: cambiar(e, s, c))
+            t.fila(f"{ext.nombre}   {ext.version}".strip(), desc, sw)
         if not ge.lista:
             t.fila("No hay extensiones", f"Copia archivos en {CARPETA_EXT} y pulsa Recargar.")
         l.addWidget(t)

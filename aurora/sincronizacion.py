@@ -2,8 +2,12 @@
 
 Cada dispositivo escribe su propio archivo (Aurora-Sync/<perfil>/<dispositivo>.json) en una carpeta que
 sincroniza otro programa (OneDrive, Dropbox, Google Drive, Syncthing…). Al sincronizar, Aurora lee los
-archivos de los demás dispositivos y mezcla accesos, historial y contraseñas. Las contraseñas viajan
-cifradas con una frase de paso (AES de la librería `cryptography`), nunca en claro.
+archivos de los demás dispositivos y mezcla accesos, historial y contraseñas. Con una frase de paso, las
+contraseñas y el historial viajan cifrados (AES de la librería `cryptography`), nunca en claro.
+
+Cada dispositivo deriva su clave con su propia sal, que publica en su archivo («sal»), así que dos PCs que
+empiezan a la vez no pueden acabar con sales distintas. Si existe el antiguo sal.bin compartido, se adopta
+como sal propia para seguir entendiéndose con dispositivos que aún usan la versión 1.
 """
 import hashlib
 import secrets
@@ -39,6 +43,7 @@ class Sincronizador(QObject):
         self.p = perfil
         self.estado = Almacen("sync_estado", {"borrados_marcadores": {}, "borrados_claves": {}, "ultima": ""},
                               perfil.carpeta)
+        self._claves = {}  # (frase, sal) → Fernet: PBKDF2 es lento a propósito, no se repite en cada sync
         self.reloj = QTimer(self, interval=10 * 60 * 1000)
         self.reloj.timeout.connect(lambda: self.sincronizar(silencioso=True))
         self.reloj.start()
@@ -60,18 +65,49 @@ class Sincronizador(QObject):
         self.estado.datos[f"borrados_{tipo}"][clave] = time.time()
         self.estado.guardar()
 
-    def _fernet(self, carpeta):
+    def _frase(self):
         if not (HAY_CRYPTO and self.a.get("sync_frase")):
             return None
         try:
-            frase = descifrar(self.a["sync_frase"])
+            return descifrar(self.a["sync_frase"]) or None
         except Exception:
             return None
-        archivo_sal = carpeta / "sal.bin"
-        if not archivo_sal.exists():
-            archivo_sal.write_bytes(secrets.token_bytes(16))
-        clave = hashlib.pbkdf2_hmac("sha256", frase.encode("utf-8"), archivo_sal.read_bytes(), 300_000)
-        return Fernet(base64.urlsafe_b64encode(clave))
+
+    def _mi_sal(self, carpeta):
+        if not self.estado.datos.get("sal"):
+            antigua = carpeta / "sal.bin"
+            sal = antigua.read_bytes() if antigua.exists() else secrets.token_bytes(16)
+            if not antigua.exists():  # para que los dispositivos con la versión 1 usen la misma
+                antigua.write_bytes(sal)
+            self.estado.datos["sal"] = base64.b64encode(sal).decode()
+            self.estado.guardar()
+        return base64.b64decode(self.estado.datos["sal"])
+
+    def _fernet(self, frase, sal):
+        if not (frase and sal):
+            return None
+        if (frase, sal) not in self._claves:
+            clave = hashlib.pbkdf2_hmac("sha256", frase.encode("utf-8"), sal, 300_000)
+            self._claves[(frase, sal)] = Fernet(base64.urlsafe_b64encode(clave))
+        return self._claves[(frase, sal)]
+
+    def _fernet_de(self, frase, carpeta, otro):
+        """La clave con la que otro dispositivo cifró su archivo."""
+        if otro.get("sal"):
+            sal = base64.b64decode(otro["sal"])
+        else:  # versión 1: sal compartida en sal.bin
+            antigua = carpeta / "sal.bin"
+            sal = antigua.read_bytes() if antigua.exists() else None
+        return self._fernet(frase, sal)
+
+    @staticmethod
+    def _descifrar(fernet, token):
+        if fernet is None:
+            raise RuntimeError("otro dispositivo cifró sus datos con una frase de paso: ponla también aquí")
+        try:
+            return fernet.decrypt(token.encode()).decode("utf-8")
+        except InvalidToken:
+            raise RuntimeError("la frase de paso no coincide con la de tus otros dispositivos")
 
     def sincronizar(self, silencioso=False):
         if not self.configurado() or self.p.incognito:
@@ -89,14 +125,23 @@ class Sincronizador(QObject):
         carpeta = self.carpeta()
         carpeta.mkdir(parents=True, exist_ok=True)
         yo = self.dispositivo()
-        fernet = self._fernet(carpeta)
-        otros = []
+        frase = self._frase()
+        sal = self._mi_sal(carpeta) if frase else None
+        fernet = self._fernet(frase, sal)
+        otros, falta_frase = [], False
         for archivo in carpeta.glob("*.json"):
             if archivo.stem != yo:
                 try:
-                    otros.append(json.loads(archivo.read_text(encoding="utf-8")))
+                    o = json.loads(archivo.read_text(encoding="utf-8"))
                 except (OSError, ValueError):
-                    pass
+                    continue
+                if isinstance(o, dict):
+                    o["_fernet"] = self._fernet_de(frase, carpeta, o) if frase else None
+                    if "historial_c" in o and frase:
+                        o["historial"] = json.loads(self._descifrar(o["_fernet"], o["historial_c"]))
+                    elif "historial_c" in o or o.get("claves"):
+                        falta_frase = True  # sin frase aquí no se puede leer lo que llega cifrado
+                    otros.append(o)
 
         # 1. borrados (lápidas): gana el más reciente de todos los dispositivos
         for tipo in ("marcadores", "claves"):
@@ -135,16 +180,13 @@ class Sincronizador(QObject):
         n_claves = 0
         if fernet:
             for o in otros:
-                for c in o.get("claves", []):
+                for c in o.get("claves", []) if o["_fernet"] else []:
                     k = c["origen"] + "\n" + c["usuario"]
                     if borr_c.get(k, 0) >= c.get("ts", 0):
                         continue
                     local = next((x for x in self.p.claves.de(c["origen"]) if x["usuario"] == c["usuario"]), None)
                     if local is None or c.get("ts", 0) > local.get("ts", 0):
-                        try:
-                            plano = fernet.decrypt(c["clave"].encode()).decode()
-                        except InvalidToken:
-                            raise RuntimeError("la frase de paso no coincide con la de tus otros dispositivos")
+                        plano = self._descifrar(o["_fernet"], c["clave"])
                         self.p.claves.guardar_cuenta(c["origen"], c["usuario"], plano, ts=c.get("ts"), guardar=False)
                         n_claves += 1
             self.p.claves.datos["cuentas"] = [
@@ -153,14 +195,24 @@ class Sincronizador(QObject):
             self.p.claves.guardar()
 
         # 5. escribir mi archivo con el resultado de la mezcla
+        claves = []
+        for c in self.p.claves.datos["cuentas"] if fernet else []:
+            plano = self.p.claves.leer_clave(c)
+            if plano is not None:  # nunca se envía como vacía una contraseña que no se pudo descifrar
+                claves.append({"origen": c["origen"], "usuario": c["usuario"], "ts": c.get("ts", 0),
+                               "clave": fernet.encrypt(plano.encode()).decode()})
+        historial = self.p.historial.datos[:3000]
         mio = {
-            "dispositivo": yo, "ts": time.time(), "version": 1,
-            "marcadores": self.p.marcadores.datos, "historial": self.p.historial.datos[:3000],
+            "dispositivo": yo, "ts": time.time(), "version": 2,
+            "marcadores": self.p.marcadores.datos,
             "borrados": {"marcadores": borr_m, "claves": borr_c},
-            "claves": [{"origen": c["origen"], "usuario": c["usuario"], "ts": c.get("ts", 0),
-                        "clave": fernet.encrypt(self.p.claves.clave(c).encode()).decode()}
-                       for c in self.p.claves.datos["cuentas"]] if fernet else [],
+            "claves": claves,
         }
+        if fernet:
+            mio["sal"] = base64.b64encode(sal).decode()
+            mio["historial_c"] = fernet.encrypt(json.dumps(historial, ensure_ascii=False).encode()).decode()
+        else:
+            mio["historial"] = historial
         temporal = carpeta / f"{yo}.tmp"
         temporal.write_text(json.dumps(mio, ensure_ascii=False), encoding="utf-8")
         os.replace(temporal, carpeta / f"{yo}.json")
@@ -168,4 +220,6 @@ class Sincronizador(QObject):
         for v in self.p.ventanas:
             v.generar_nueva()
         extra = f", {n_claves} contraseñas nuevas" if n_claves else ""
+        if falta_frase:
+            extra += " (pon la frase de paso para recibir historial y contraseñas)"
         return f"⇅  Sincronizado con {len(otros)} dispositivo(s){extra}"

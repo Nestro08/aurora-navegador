@@ -9,6 +9,7 @@ Se instalan en ~/.aurora/extensiones y pueden ser:
          "python": "extension.py"}
     El módulo de Python define activar(aurora) y recibe la API de AuroraAPI (más abajo).
 """
+import hashlib
 import importlib.util
 import traceback
 
@@ -86,6 +87,7 @@ class Extension:
         self.nombre, self.descripcion, self.version = ident, "", ""
         self.coincide, self.js, self.css, self.python = ["*://*/*"], [], [], None
         self.tipos, self.error, self.modulo = [], "", None
+        self.sin_permiso = False  # extensión de Python que aún no has aprobado (o cuyo código cambió)
 
     @property
     def carpeta(self):
@@ -166,6 +168,8 @@ class GestorExtensiones(QObject):
         self.perfiles_web = []
         self.instalar_ejemplos()
         self.estado = Almacen("estado", {}, CARPETA_EXT)
+        # fuera de la carpeta de extensiones: lo que copies ahí no puede aprobarse a sí mismo
+        self.aprobadas = Almacen("extensiones_aprobadas", {})
         self.cargar()
 
     @staticmethod
@@ -185,7 +189,36 @@ class GestorExtensiones(QObject):
                                                               "contador-palabras"]}), encoding="utf-8")
 
     def activa(self, ext):
-        return self.estado.datos.get(ext.id, True)
+        return self.estado.datos.get(ext.id, True) and not ext.sin_permiso
+
+    @staticmethod
+    def huella(ext):
+        """SHA-256 de todo el código Python de la extensión."""
+        h = hashlib.sha256()
+        for archivo in sorted(ext.carpeta.rglob("*.py")):
+            if "__pycache__" not in archivo.parts:
+                h.update(archivo.relative_to(ext.carpeta).as_posix().encode() + b"\0" + archivo.read_bytes())
+        return h.hexdigest()
+
+    def _es_ejemplo_intacto(self, ext):
+        return all((ext.carpeta / Path(r).name).read_text(encoding="utf-8") == c for r, c in EJEMPLOS.items()
+                   if r.startswith(ext.id + "/") and r.endswith(".py"))
+
+    def aprobar(self, ext):
+        self.aprobadas.datos[ext.id] = self.huella(ext)
+        self.aprobadas.guardar()
+        ext.sin_permiso = False
+
+    def _revisar_permiso(self, ext):
+        if not ext.python:
+            return
+        huella = self.huella(ext)
+        if self.aprobadas.datos.get(ext.id) == huella:
+            return
+        if ext.id not in self.aprobadas.datos and ext.id in ACTIVAS_POR_DEFECTO and self._es_ejemplo_intacto(ext):
+            self.aprobar(ext)
+            return
+        ext.sin_permiso = True
 
     def cargar(self):
         """Lee la carpeta de extensiones."""
@@ -218,6 +251,10 @@ class GestorExtensiones(QObject):
                 else:
                     continue
                 ext.tipos = [t for t, x in (("JavaScript", ext.js), ("CSS", ext.css), ("Python", ext.python)) if x]
+                for nombre in ext.js + ext.css + ([ext.python] if ext.python else []):
+                    if not (ext.carpeta / nombre).resolve().is_relative_to(ext.carpeta.resolve()):
+                        raise ValueError(f"«{nombre}» está fuera de la carpeta de la extensión")
+                self._revisar_permiso(ext)
                 self.lista.append(ext)
             except Exception as e:
                 ext = Extension(ruta.name, ruta)
@@ -286,6 +323,8 @@ class GestorExtensiones(QObject):
         self.al_cargar = [c for c in self.al_cargar if c[0] != ext.id]
 
     def cambiar(self, ext, activa):
+        if activa and ext.sin_permiso:
+            raise PermissionError("Aprueba antes la extensión con aprobar()")
         self.estado.datos[ext.id] = activa
         self.estado.guardar()
         if ext.python:
