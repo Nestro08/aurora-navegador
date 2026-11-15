@@ -8,7 +8,8 @@ from .motor import *  # noqa: F401,F403
 from .desarrollo import *  # noqa: F401,F403
 from .contrasenas import *  # noqa: F401,F403
 from .perfiles import *  # noqa: F401,F403
-from .asistente import PROVEEDORES, ClienteIA
+from .asistente import IAS_WEB, MODO_API, PROVEEDORES, ClienteIA
+from .importar import DialogoImportar
 
 
 # ═════════════════════════════ pantalla de ajustes
@@ -395,6 +396,9 @@ class Ajustes(QWidget):
         nombre.editingFinished.connect(lambda: (v.set_ajuste("nombre", nombre.text().strip()), v.generar_nueva(),
                                                 v.recargar_nuevas()))
         t.fila("Tu nombre", "Para que la página de inicio te salude.", nombre)
+        t.fila("Importar desde otro navegador", "Marcadores, historial, contraseñas, buscador y sesiones de "
+                                                "Chrome, Chromium, Brave, Edge o Vivaldi.",
+               botones(("Importar…", lambda: DialogoImportar(v).exec() and self.refrescar())))
         if sys.platform.startswith("linux"):
             def predeterminado():
                 import subprocess
@@ -1073,6 +1077,26 @@ class Ajustes(QWidget):
     def _asistente(self):
         sa, l = self._pagina()
         a, v = self.v.ajustes.datos, self.v
+        modos = ["Con tu cuenta (la web de la IA)", "Avanzado: clave de API u Ollama"]
+
+        def aplicar(clave, valor):
+            v.set_ajuste(clave, valor)
+            for ventana in v.p.ventanas:
+                ventana.panel_ia.actualizar()
+
+        t = Tarjeta()
+        t.fila("Cómo usar el asistente", "Con tu cuenta inicias sesión en el panel y tus conversaciones se guardan "
+                                         "en ella. Con clave de API los botones rápidos leen la página directamente.",
+               desplegable(modos, modos[v.panel_ia.modo == MODO_API],
+                           lambda m: aplicar("ia_modo", MODO_API if m == modos[1] else "web"), 260))
+        t.fila("Tu IA", "La que se abre en el panel con tu cuenta.",
+               desplegable(list(IAS_WEB), a["ia_web"], lambda n: (aplicar("ia_web", n), aplicar("ia_modo", "web")), 260))
+        t.fila("Usar el contenido de la página", "Los botones rápidos (Resumir, Traducir…) añaden el texto de la "
+                                                 "pestaña a la petición.",
+               interruptor(a["ia_contexto"], lambda c: v.set_ajuste("ia_contexto", c)))
+        l.addWidget(t)
+
+        self._sub(l, "Avanzado: clave de API u Ollama")
         t = Tarjeta()
         modelo = QLineEdit(a["ia_modelo"])
         modelo.setFixedWidth(260)
@@ -1101,9 +1125,6 @@ class Ajustes(QWidget):
                                                clave.setPlaceholderText("•••••••• (guardada)"))
                                       if clave.text().strip() else None)
         t.fila("Clave de API", "Se guarda cifrada. Claude: console.anthropic.com → API keys.", clave)
-        t.fila("Usar el contenido de la página", "El asistente lee el texto de la pestaña para poder resumirla o "
-                                                 "responder sobre ella.",
-               interruptor(a["ia_contexto"], lambda c: v.set_ajuste("ia_contexto", c)))
         l.addWidget(t)
         t = Tarjeta()
         prueba = t.fila("Probar la conexión", "Envía un mensaje corto para comprobar que todo funciona.")
@@ -1135,8 +1156,8 @@ class Ajustes(QWidget):
         prueba.layout().addWidget(botones(("Probar", probar), ("Abrir el asistente",
                                                                 lambda: (self.cerrar(), v.panel_ia.alternar()))))
         l.addWidget(t)
-        nota = QLabel("Privacidad: lo que preguntas (y el texto de la página, si lo activas) se envía al proveedor "
-                      "elegido. Con Ollama o LM Studio todo se queda en tu ordenador.", objectName="tenue")
+        nota = QLabel("Privacidad: lo que preguntas (y el texto de la página, si lo activas) se envía a la IA o al "
+                      "proveedor elegido. Con Ollama o LM Studio todo se queda en tu ordenador.", objectName="tenue")
         nota.setWordWrap(True)
         l.addWidget(nota)
         l.addStretch()

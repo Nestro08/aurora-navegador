@@ -407,6 +407,7 @@ class Ventana(QMainWindow, MixinOrganizacion, MixinMultimedia, MixinDescargas, M
             ("Borrar cookies y caché", "", self.borrar_cookies),
             ("Abrir carpeta de descargas", "Ctrl+J", self.abrir_descargas),
             ("Ajustes", "Ctrl+,", lambda: self.abrir_ajustes()),
+            ("Importar desde Chrome u otro navegador…", "", self.importar_navegador),
             ("Nueva ventana", "Ctrl+N", lambda: gestor().nueva_ventana(self.p.nombre, restaurar=False)),
             ("Nueva ventana de incógnito", "Ctrl+Shift+N", lambda: gestor().nueva_ventana(self.p.nombre, incognito=True)),
             ("Modo lectura", "F9", self.modo_lectura),
@@ -821,6 +822,10 @@ class Ventana(QMainWindow, MixinOrganizacion, MixinMultimedia, MixinDescargas, M
             NUEVA_INCOG.write_text(contenido, encoding="utf-8")
         else:
             NUEVA.write_text(contenido, encoding="utf-8")
+
+    def importar_navegador(self):
+        from .importar import DialogoImportar
+        DialogoImportar(self).exec()
 
     def set_buscador(self, nombre):
         self.ajustes.datos["buscador"] = nombre

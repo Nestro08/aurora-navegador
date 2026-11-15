@@ -82,6 +82,8 @@ QDialog, QMessageBox {{ background: #12151c; }}
 #itemDescarga {{ background: {c['chip']}; border: 1px solid {c['borde']}; border-radius: 12px; }}
 QPushButton#chipIA {{ border-radius: 14px; padding: 6px 12px; text-align: center; }}
 QPushButton#chipIA:hover {{ border-color: {T.a1}; }}
+QPushButton#tarjetaIA {{ border-radius: 12px; padding: 9px 14px; font-weight: 600; }}
+QPushButton#tarjetaIA:hover {{ border-color: {T.a1}; background: rgba({rgb(T.a1)},0.12); }}
 #chatIA {{ background: {c['chip']}; border: 1px solid {c['borde']}; border-radius: 12px; padding: 8px; }}
 #flotante {{ background: #000; border: 1px solid #2d3343; }}
 #barraFlotante {{ background: #12151c; }}

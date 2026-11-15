@@ -61,9 +61,10 @@ pestaña nueva en la ventana que tienes. Acepta URLs y archivos como argumentos 
 | Privacidad | Bloqueador de anuncios y rastreadores, Do Not Track y GPC, bloquear cookies de terceros, **ventana de incógnito** (Ctrl+Shift+N), **perfiles** separados (Personal, Uni…) |
 | Contraseñas | Guarda y rellena; **generador** al registrarte; cifradas (llavero de GNOME/KDE en Linux, DPAPI en Windows); **contraseña maestra** o **Windows Hello** para verlas, copiarlas o rellenarlas; importar el CSV de Chrome o Edge. Los scripts de contraseñas corren aislados de la web: ninguna página puede espiarlos ni fingir que has escrito una contraseña |
 | Desarrolladores (F12) | Inspector de Chromium, consola JS, registro de red, **cliente de API** tipo Postman, **auditoría** (accesibilidad, SEO, rendimiento, seguridad, enlaces rotos), modo responsive, User-Agent, CSS en vivo, servidor local con recarga en vivo, **cuentagotas y medidor** (Ctrl+Shift+X), **captura de página completa**, visor de JSON |
+| Importar | Desde Chrome, Chromium, Brave, Edge o Vivaldi (*Ajustes → General* o Ctrl+K): marcadores, historial, contraseñas (también las de tu cuenta de Google), buscador y sesiones iniciadas. Las contraseñas se descifran con la clave del navegador y se vuelven a cifrar con la de Aurora |
 | Sincronización | Accesos, historial y contraseñas entre tus PCs (Windows y Linux) a través de una carpeta de OneDrive, Dropbox, Syncthing… Con una frase de paso, las contraseñas y el historial viajan cifrados con AES |
 | Extensiones | Userscripts `.user.js` (compatibles con Tampermonkey), estilos `.user.css` y extensiones en Python con API propia (solo se ejecutan si las apruebas). Incluye 4 de ejemplo |
-| Asistente IA (Ctrl+Shift+A) | Resume, traduce y explica la página o lo que selecciones, con respuestas en tiempo real. Funciona con Claude (clave de API) o cualquier proveedor compatible con OpenAI, incluido **Ollama** (gratis y en tu PC) |
+| Asistente IA (Ctrl+Shift+A) | Elige tu IA (Claude, ChatGPT, Gemini, Copilot, Perplexity o Le Chat) e inicia sesión con tu cuenta en el panel lateral: las conversaciones se guardan en ella. Los botones rápidos (resumir, traducir, explicar) escriben la petición con el texto de la página en el chat; la envías tú con Enter. Avanzado: con clave de API de Claude o cualquier proveedor compatible con OpenAI, incluido **Ollama** (gratis y en tu PC) |
 | Ajustes (Ctrl+,) | General, Apariencia (7 colores de acento), Privacidad, Contraseñas, Historial, Accesos, Descargas, Perfiles, Sincronización, Extensiones, Asistente IA, Desarrolladores |
 
 ## Dónde se guardan tus datos
@@ -143,4 +144,5 @@ contraseñas.
   `instalar-fedora.sh`). Con el PyQt6 de pip, en Windows incluido, solo se ven WebM, VP9 y AV1.
 - No es compatible con las extensiones de la Chrome Web Store (sí con los userscripts).
 - El vídeo flotante abre una ventanita propia; no usa el picture-in-picture del sistema.
-- El asistente usa tu propia clave o un modelo local; Aurora no incluye ningún servicio de IA.
+- El asistente usa tu cuenta de la IA que elijas, tu propia clave o un modelo local; Aurora no incluye ningún
+  servicio de IA. Algunas webs pueden bloquear «Continuar con Google» dentro del panel: usa correo y contraseña.

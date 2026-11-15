@@ -22,7 +22,7 @@ assert str(comun.DATOS).startswith(HOME_PRUEBAS)
 _APP = QApplication.instance() or QApplication(["aurora-tests"])  # Chromium necesita el nombre del programa
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def app():
     return _APP
 

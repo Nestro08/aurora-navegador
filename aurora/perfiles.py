@@ -41,7 +41,9 @@ class Perfil(QObject):
 
     def _configurar_web(self):
         a = self.ajustes.datos
-        self.ua_original = self.web.httpUserAgent()
+        # sin «QtWebEngine/x.y»: así las webs (y el inicio de sesión de Google) lo tratan como un Chrome normal
+        self.ua_original = re.sub(r" QtWebEngine/\S+", "", self.web.httpUserAgent())
+        self.web.setHttpUserAgent(self.ua_original)
         if UAS.get(a.get("ua")):
             self.web.setHttpUserAgent(UAS[a["ua"]])
         A = QWebEngineSettings.WebAttribute
