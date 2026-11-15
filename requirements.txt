@@ -1,0 +1,12 @@
+# Necesarios
+PyQt6>=6.6
+PyQt6-WebEngine>=6.6
+
+# Recomendado: cifra las contraseñas que se sincronizan entre dispositivos
+cryptography>=42
+
+# Linux: guarda la clave de las contraseñas en el llavero del sistema (GNOME Keyring / KWallet)
+keyring>=24
+
+# Opcional (solo Windows): verificar con Windows Hello antes de mostrar contraseñas
+# winrt-Windows.Security.Credentials.UI
