@@ -200,7 +200,12 @@ box-shadow:0 3px 10px rgba(0,0,0,.3);z-index:2;padding:0}
 .acc:hover .ed{opacity:1;transform:none}.acc .ed:hover{background:var(--a);color:#fff;border-color:var(--a)}
 .acc.nuevo .esfera{background:transparent;border:2px dashed rgba(var(--t),.3);box-shadow:none;color:var(--tenue);font-size:30px;font-weight:300;text-shadow:none}
 .acc.nuevo .esfera::after{display:none}.acc.nuevo:hover .esfera{border-color:var(--a);color:var(--a)}
-.acc.arrastrando{opacity:.3}.acc.destino .esfera{box-shadow:0 0 0 3px var(--a),0 0 30px var(--a)}
+.acc{touch-action:none}.acc.libre{position:fixed;width:96px;z-index:3;margin:0}
+.acc.volando{z-index:6;cursor:grabbing;transition:none}.acc.volando .esfera{transform:scale(1.12);box-shadow:0 26px 50px rgba(0,0,0,.45),0 0 34px var(--brillo,rgba(var(--t),.2))}
+.acc.volando .ed{opacity:0!important}
+#ordenar{position:fixed;right:20px;bottom:18px;padding:7px 13px;border-radius:999px;border:1px solid rgba(var(--t),.14);
+background:rgba(var(--f),.6);backdrop-filter:blur(12px);color:var(--tenue);font:inherit;font-size:12px;cursor:pointer;display:none;z-index:4}
+#ordenar.si{display:block}#ordenar:hover{color:var(--texto);border-color:var(--a)}
 #modal{position:fixed;inset:0;display:none;place-items:center;background:rgba(0,0,0,.45);backdrop-filter:blur(8px);z-index:10}
 #modal.si{display:grid}#modal.si .caja{animation:entrar .3s cubic-bezier(.2,.8,.2,1) both}
 .caja{width:min(430px,90vw);background:var(--panel);border:1px solid rgba(var(--t),.12);border-radius:22px;padding:24px 24px 20px;
@@ -233,6 +238,7 @@ kbd{background:rgba(var(--t),.07);border:1px solid rgba(var(--t),.12);border-rad
 <label>Icono (un emoji o letras; vacío = el icono de la web)</label><input class="c" id="mi" maxlength="4" placeholder="🚀">
 <div class="fila"><button type="button" class="x" id="mb">Quitar</button><button type="button" id="mx">Cancelar</button>
 <button class="p" id="mg">Guardar</button></div></form></div>
+<button id="ordenar" title="Devolver todas las esferas a la cuadrícula">⊞ Ordenar esferas</button>
 <div class="pista e"><kbd>Ctrl</kbd> <kbd>K</kbd> paleta de comandos &nbsp;·&nbsp; <kbd>F12</kbd> herramientas de desarrollo &nbsp;·&nbsp; <kbd>Ctrl</kbd> <kbd>D</kbd> guardar en accesos</div>
 <script>
 const B=%%BUSCADOR%%,N=%%NOMBRE%%;
@@ -259,12 +265,25 @@ document.addEventListener('keydown',e=>{if(e.key==='Escape')cerrarModal()});
 document.addEventListener('click',e=>{const t=e.target,ed=t.closest('[data-ed]'),del=t.closest('[data-del]'),nu=t.closest('.nuevo');
  if(!(ed||del||nu))return;e.preventDefault();e.stopPropagation();
  if(del)enviar({a:'borrar',i:+del.dataset.del});else abrirModal(ed?+ed.dataset.ed:-1)},true);
-let de=null;document.querySelectorAll('.acc[data-i]').forEach(el=>{
- el.addEventListener('dragstart',e=>{de=+el.dataset.i;el.classList.add('arrastrando');e.dataTransfer.effectAllowed='move'});
- el.addEventListener('dragend',()=>{el.classList.remove('arrastrando');document.querySelectorAll('.destino').forEach(x=>x.classList.remove('destino'))});
- el.addEventListener('dragover',e=>{if(de!==null){e.preventDefault();el.classList.add('destino')}});
- el.addEventListener('dragleave',()=>el.classList.remove('destino'));
- el.addEventListener('drop',e=>{e.preventDefault();const a=+el.dataset.i;if(de!==null&&de!==a)enviar({a:'mover',de:de,hacia:a});de=null})});
+// arrastrar las esferas a cualquier sitio (un clic sin moverse abre la web)
+let arr=null;
+document.querySelectorAll('.acc[data-i]').forEach(el=>{
+ el.addEventListener('dragstart',e=>e.preventDefault());
+ el.addEventListener('pointerdown',e=>{if(e.button!==0||e.target.closest('.ed'))return;const r=el.getBoundingClientRect();
+  arr={el,i:+el.dataset.i,x0:e.clientX,y0:e.clientY,dx:e.clientX-r.left,dy:e.clientY-r.top,w:r.width,h:r.height,movido:false}})});
+addEventListener('pointermove',e=>{if(!arr)return;const a=arr,el=a.el;
+ if(!a.movido){if(Math.hypot(e.clientX-a.x0,e.clientY-a.y0)<6)return;a.movido=true;
+  el.classList.add('libre','volando');el.style.animation='none';el.style.width=a.w+'px'}
+ el.style.left=Math.max(0,Math.min(innerWidth-a.w,e.clientX-a.dx))+'px';
+ el.style.top=Math.max(0,Math.min(innerHeight-a.h,e.clientY-a.dy))+'px'});
+addEventListener('pointerup',()=>{if(!arr)return;const a=arr;arr=null;if(!a.movido)return;
+ a.el.classList.remove('volando');a.el.dataset.arrastrado=1;const r=a.el.getBoundingClientRect();
+ ordenar.classList.add('si');
+ enviar({a:'colocar',i:a.i,x:(r.left+r.width/2)/innerWidth,y:(r.top+r.height/2)/innerHeight})});
+document.addEventListener('click',e=>{const el=e.target.closest('.acc[data-arrastrado]');
+ if(el){e.preventDefault();e.stopPropagation();delete el.dataset.arrastrado}},true);
+ordenar.onclick=()=>enviar({a:'ordenar'});
+if(document.querySelector('.acc.libre'))ordenar.classList.add('si');
 f.onsubmit=e=>{e.preventDefault();const v=q.value.trim();if(!v)return;let u;
 if(/^[a-z][\w+.-]*:\/\//i.test(v))u=v;else if(/^(localhost|127\.0\.0\.1)(:\d+)?/.test(v))u='http://'+v;
 else if(/^[^\s]+\.[^\s]{2,}$/.test(v))u='https://'+v;else u=B.replace('{}',encodeURIComponent(v));location.href=u};

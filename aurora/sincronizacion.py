@@ -164,6 +164,9 @@ class Sincronizador(QObject):
                     for extra in ("color", "icono"):  # esferas personalizadas
                         if isinstance(m.get(extra), str) and m[extra]:
                             locales[m["url"]][extra] = m[extra][:7 if extra == "color" else 4]
+                    pos = m.get("pos")
+                    if isinstance(pos, dict) and all(isinstance(pos.get(k), (int, float)) for k in ("x", "y")):
+                        locales[m["url"]]["pos"] = {k: max(0.0, min(1.0, float(pos[k]))) for k in ("x", "y")}
         self.p.marcadores.datos = [locales[u] for u in orden
                                    if u in locales and borr_m.get(u, 0) <= locales[u].get("ts", 0)]
         self.p.marcadores.guardar()

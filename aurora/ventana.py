@@ -863,9 +863,12 @@ class Ventana(QMainWindow, MixinOrganizacion, MixinMultimedia, MixinDescargas, M
                          f"hsl({(tono + 30) % 360},70%,32%))")
                 brillo = f"hsla({tono},80%,60%,.55)"
             estilo = "" if "blanca" in clase else f' style="background:{fondo}"'
+            pos = m.get("pos")
+            sitio = (f"left:calc({pos['x'] * 100:.3f}% - 48px);top:calc({pos['y'] * 100:.3f}% - 52px);"
+                     if isinstance(pos, dict) else "")
             piezas.append(
-                f'<a class="acc e" draggable="true" data-i="{i}" href="{html.escape(url, True)}" '
-                f'style="animation-delay:{0.22 + i * 0.03:.3f}s;--brillo:{brillo}">'
+                f'<a class="acc e{" libre" if sitio else ""}" draggable="false" data-i="{i}" '
+                f'href="{html.escape(url, True)}" style="{sitio}animation-delay:{0.22 + i * 0.03:.3f}s;--brillo:{brillo}">'
                 f'<div class="{clase}"{estilo}>{contenido}</div><span>{html.escape(titulo)}</span>'
                 f'<button class="ed e1" data-ed="{i}" title="Editar">✎</button>'
                 f'<button class="ed e2" data-del="{i}" title="Quitar">✕</button></a>')
@@ -905,7 +908,7 @@ class Ventana(QMainWindow, MixinOrganizacion, MixinMultimedia, MixinDescargas, M
         from .importar import DialogoImportar
         DialogoImportar(self).exec()
 
-    def accion_inicio(self, d):
+    def accion_inicio(self, d, pagina=None):
         """Añadir, editar, quitar o mover una esfera desde la página de inicio."""
         m = self.marcadores.datos
         ahora = datetime.now().timestamp()
@@ -937,16 +940,22 @@ class Ventana(QMainWindow, MixinOrganizacion, MixinMultimedia, MixinDescargas, M
         elif accion == "borrar" and 0 <= i < len(m):
             self.p.marcar_borrado_marcador(m[i]["url"])
             del m[i]
-        elif accion == "mover":
-            de, hacia = int(d.get("de", -1)), int(d.get("hacia", -1))
-            if 0 <= de < len(m) and 0 <= hacia < len(m):
-                m.insert(hacia, m.pop(de))
+        elif accion == "colocar" and 0 <= i < len(m):
+            x, y = (max(0.02, min(0.98, float(d.get(k, 0.5)))) for k in ("x", "y"))
+            m[i]["pos"] = {"x": round(x, 4), "y": round(y, 4)}
+            m[i]["ts"] = ahora  # para que la posición viaje a tus otros PCs
+        elif accion == "ordenar":
+            for x in m:
+                x.pop("pos", None)
+                x["ts"] = ahora
         else:
             return
         self.marcadores.guardar()
+        # al colocar, la página que arrastra ya la muestra en su sitio: no se recarga (se vería un parpadeo)
+        excepto = pagina if accion == "colocar" else None
         for ventana in self.p.ventanas:
             ventana.generar_nueva()
-            ventana.recargar_nuevas()
+            ventana.recargar_nuevas(excepto)
             ventana._estrella()
 
     def set_buscador(self, nombre):
@@ -987,7 +996,7 @@ class Ventana(QMainWindow, MixinOrganizacion, MixinMultimedia, MixinDescargas, M
         if mensaje.startswith(MSG_NT):
             if self.es_nueva(pagina.url()) and not self.incognito:  # solo de la página de inicio de Aurora
                 try:
-                    self.accion_inicio(json.loads(mensaje[len(MSG_NT):]))
+                    self.accion_inicio(json.loads(mensaje[len(MSG_NT):]), pagina)
                 except (ValueError, TypeError, KeyError):
                     pass
             return
@@ -1051,9 +1060,9 @@ class Ventana(QMainWindow, MixinOrganizacion, MixinMultimedia, MixinDescargas, M
         self.paleta.cerrar()
         self.ajustes_ui.abrir(seccion)
 
-    def recargar_nuevas(self):
+    def recargar_nuevas(self, excepto=None):
         for c in self.tira.chips:
-            if self.es_nueva(c.pagina.vista.url()):
+            if self.es_nueva(c.pagina.vista.url()) and c.pagina.vista.page() is not excepto:
                 c.pagina.vista.reload()
 
     def aplicar_acento(self, nombre):
