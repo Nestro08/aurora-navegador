@@ -77,11 +77,21 @@ class Ventana(QMainWindow, MixinOrganizacion, MixinMultimedia, MixinDescargas, M
         if self.p.sync:
             self.p.sync.terminado.connect(self._sync_terminada)
 
+        # en Linux las pestañas hacen de barra de título (en Windows se oscurece la del sistema)
+        self.integrada = sys.platform != "win32" and not self.ajustes.datos.get("barra_sistema")
+        if self.integrada:
+            self.setWindowFlag(Qt.WindowType.FramelessWindowHint, True)
+            self.setMouseTracking(True)
         self.generar_nueva()
         self.iniciar_descargas()
         self.iniciar_multimedia()
         self.iniciar_dev()
         self.construir_ui()
+        if self.integrada:
+            self.controles = ControlesVentana(self)
+            self.tira.poner_controles(self.controles)
+            self.centralWidget().setCursor(Qt.CursorShape.ArrowCursor)  # que no hereden el cursor de los bordes
+            self._ajustar_bordes()
         self.iniciar_organizacion()
         self.registrar_comandos()
         self.actualizar_perfil()
@@ -238,6 +248,75 @@ class Ventana(QMainWindow, MixinOrganizacion, MixinMultimedia, MixinDescargas, M
             if capa.isVisible():
                 capa.setGeometry(self.centralWidget().rect())
                 capa.colocar()
+
+    # ────────────────────────────────────────────────────────── ventana sin marco del sistema
+    BORDE = 5
+
+    def _ajustar_bordes(self):
+        m = 0 if self.isMaximized() or self.isFullScreen() else self.BORDE
+        self.setContentsMargins(m, m, m, m)
+        self.controles.actualizar()
+        self.update()
+
+    def changeEvent(self, e):
+        super().changeEvent(e)
+        if e.type() == QEvent.Type.WindowStateChange and getattr(self, "controles", None):
+            self._ajustar_bordes()
+
+    def _bordes_en(self, pos):
+        if not self.integrada or self.contentsMargins().left() == 0:
+            return None
+        m, bordes = self.BORDE + 3, []
+        if pos.x() <= m:
+            bordes.append(Qt.Edge.LeftEdge)
+        elif pos.x() >= self.width() - m:
+            bordes.append(Qt.Edge.RightEdge)
+        if pos.y() <= m:
+            bordes.append(Qt.Edge.TopEdge)
+        elif pos.y() >= self.height() - m:
+            bordes.append(Qt.Edge.BottomEdge)
+        if not bordes:
+            return None
+        combinados = bordes[0]
+        for b in bordes[1:]:
+            combinados |= b
+        return combinados
+
+    def mouseMoveEvent(self, e):
+        bordes = self._bordes_en(e.position().toPoint())
+        if bordes is None:
+            self.unsetCursor()
+            return super().mouseMoveEvent(e)
+        izq_arr = (Qt.Edge.LeftEdge | Qt.Edge.TopEdge, Qt.Edge.RightEdge | Qt.Edge.BottomEdge)
+        der_arr = (Qt.Edge.RightEdge | Qt.Edge.TopEdge, Qt.Edge.LeftEdge | Qt.Edge.BottomEdge)
+        if bordes in izq_arr:
+            cursor = Qt.CursorShape.SizeFDiagCursor
+        elif bordes in der_arr:
+            cursor = Qt.CursorShape.SizeBDiagCursor
+        elif bordes in (Qt.Edge.LeftEdge, Qt.Edge.RightEdge):
+            cursor = Qt.CursorShape.SizeHorCursor
+        else:
+            cursor = Qt.CursorShape.SizeVerCursor
+        self.setCursor(cursor)
+
+    def mousePressEvent(self, e):
+        bordes = self._bordes_en(e.position().toPoint())
+        if bordes is not None and e.button() == Qt.MouseButton.LeftButton:
+            self.windowHandle().startSystemResize(bordes)
+            return
+        super().mousePressEvent(e)
+
+    def leaveEvent(self, e):
+        if self.integrada:
+            self.unsetCursor()
+        super().leaveEvent(e)
+
+    def paintEvent(self, e):
+        super().paintEvent(e)
+        if self.integrada and self.contentsMargins().left():
+            p = QPainter(self)
+            p.setPen(QColor(C["borde"]))
+            p.drawRect(self.rect().adjusted(0, 0, -1, -1))
 
     def barra_titulo_oscura(self):
         """En Windows 10/11 pone la barra de título oscura y del mismo color que la interfaz."""

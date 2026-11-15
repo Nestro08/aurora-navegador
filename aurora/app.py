@@ -81,7 +81,6 @@ def main():
             pass
     app = QApplication(sys.argv)
     app.setApplicationName(NOMBRE)
-    app.setApplicationDisplayName(NOMBRE)
     app.setDesktopFileName("aurora")  # en GNOME/Wayland enlaza la ventana con aurora.desktop (icono del dock)
     app.setWindowIcon(crear_icono_app())
     urls = _urls_de(sys.argv[1:])

@@ -1,4 +1,5 @@
-# Necesarios
+# Necesarios. En Fedora, instalar-fedora.sh usa los paquetes de dnf (python3-pyqt6-webengine):
+# el PyQt6-WebEngine de pip no trae los códecs H.264/AAC y no reproduce vídeos MP4.
 PyQt6>=6.6
 PyQt6-WebEngine>=6.6
 

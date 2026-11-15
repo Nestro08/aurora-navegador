@@ -465,6 +465,11 @@ class Ajustes(QWidget):
             m.clicked.connect(lambda _, n=m.nombre: elegir(n))
         t.fila("Color de acento", "Pestañas, botones, brillos y página de inicio.")
         t.contenido(caja, 18)
+        if sys.platform != "win32":
+            t.fila("Usar la barra de título del sistema",
+                   "Por defecto las pestañas hacen de barra de título, como en Chrome o Firefox. "
+                   "Se aplica en las ventanas nuevas.",
+                   interruptor(a["barra_sistema"], lambda c: v.set_ajuste("barra_sistema", c)))
         l.addWidget(t)
 
         self._sub(l, "Página de inicio")

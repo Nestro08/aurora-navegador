@@ -11,14 +11,18 @@ unzip Aurora-4.0.zip && cd Aurora
 bash instalar-fedora.sh
 ```
 
-El script instala Aurora para tu usuario, sin tocar el sistema salvo dos o tres librerías de Qt si faltan
-(las pide con `sudo dnf`). Después:
+El script instala Aurora para tu usuario. Con `sudo dnf` instala el PyQt6 de Fedora (su motor Chromium sí
+trae los códecs H.264 y AAC) y te ofrece `libavcodec-freeworld` de RPM Fusion, el decodificador que necesitan
+los vídeos MP4 de webs como Nike, Instagram o Twitter. El PyQt6 de pip no los trae: esas webs dicen
+«your browser doesn't support embedded videos». Después:
 
 - Aparece en **Actividades** con su icono, y con clic derecho tiene *Nueva ventana* e *Incógnito*.
 - Se abre desde la terminal con `aurora`.
 - Al final te pregunta si quieres que sea tu navegador predeterminado. Para volver a Firefox:
   `xdg-settings set default-web-browser org.mozilla.firefox.desktop`.
 - Para actualizar, vuelve a ejecutar `instalar-fedora.sh` con la versión nueva.
+- Las pestañas hacen de barra de título (arrastra la zona vacía para mover la ventana, doble clic para
+  maximizar). Si prefieres la barra del sistema: *Ajustes → Apariencia*.
 - Para desinstalar: `bash desinstalar-fedora.sh`.
 
 En Linux las contraseñas se cifran con AES. La clave se guarda en el **llavero del sistema** (GNOME
@@ -135,6 +139,8 @@ contraseñas.
 ## Límites conocidos
 
 - Netflix, Disney+ y Spotify Web no reproducen contenido: necesitan Widevine (DRM), que QtWebEngine no trae.
+- Los vídeos H.264/MP4 solo funcionan con el PyQt6 de Fedora y `libavcodec-freeworld` (lo prepara
+  `instalar-fedora.sh`). Con el PyQt6 de pip, en Windows incluido, solo se ven WebM, VP9 y AV1.
 - No es compatible con las extensiones de la Chrome Web Store (sí con los userscripts).
 - El vídeo flotante abre una ventanita propia; no usa el picture-in-picture del sistema.
 - El asistente usa tu propia clave o un modelo local; Aurora no incluye ningún servicio de IA.

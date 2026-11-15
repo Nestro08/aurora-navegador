@@ -271,11 +271,21 @@ class Tira(QWidget):
         self.fondo = C["fondo"]
         self.ancho = 200
         self._destinos = {}
+        self.integrada, self.controles, self.reserva = False, None, 0  # barra de título propia
+        self._pulsado = None
         self.boton_mas = BotonIcono("mas", "Nueva pestaña (Ctrl+T)", self, 32)
         self.boton_mas.clicked.connect(self.nueva_pedida)
         self.anim_mas = QPropertyAnimation(self.boton_mas, b"pos", self)
         self.anim_mas.setDuration(260)
         self.anim_mas.setEasingCurve(QEasingCurve.Type.OutCubic)
+
+    def poner_controles(self, controles):
+        """Convierte la tira en barra de título: botones de ventana a la derecha y arrastrar para mover."""
+        self.integrada, self.controles = True, controles
+        controles.setParent(self)
+        controles.show()
+        self.reserva = controles.width() + 16
+        self.resizeEvent(None)
 
     def color_grupo(self, gid):
         return self.grupos[gid]["color"] if gid in self.grupos else None
@@ -342,7 +352,7 @@ class Tira(QWidget):
                 fijo += ANCHO_FIJADA + 4
             elif not self.plegada(c):
                 normales += 1
-        self.ancho = int(max(56, min(232, (self.width() - fijo) / max(1, normales))))
+        self.ancho = int(max(56, min(232, (self.width() - fijo - self.reserva) / max(1, normales))))
 
     def _etiqueta(self, gid):
         if gid not in self.etiquetas:
@@ -403,7 +413,7 @@ class Tira(QWidget):
 
     def arrastrar(self, chip, x):
         chip.anim_geo.stop()
-        x = max(4, min(x, self.width() - chip.width() - 46))
+        x = max(4, min(x, self.width() - chip.width() - 46 - self.reserva))
         chip.move(x, chip.y())
         centro = x + chip.width() / 2
         otros = [c for c in self.chips if c is not chip and c.fijada == chip.fijada]
@@ -434,7 +444,25 @@ class Tira(QWidget):
         self.recolocar()
 
     def resizeEvent(self, e):
+        if self.controles:
+            self.controles.move(self.width() - self.controles.width() - 8, (self.height() - self.controles.height()) // 2)
         self.recolocar(False)
 
+    def mousePressEvent(self, e):
+        if self.integrada and e.button() == Qt.MouseButton.LeftButton:
+            self._pulsado = e.position().toPoint()
+
+    def mouseMoveEvent(self, e):
+        # se empieza a mover al arrastrar un poco, para no tragarse el doble clic
+        if self._pulsado is not None and (e.position().toPoint() - self._pulsado).manhattanLength() > 4:
+            self._pulsado = None
+            self.window().windowHandle().startSystemMove()
+
+    def mouseReleaseEvent(self, e):
+        self._pulsado = None
+
     def mouseDoubleClickEvent(self, e):
-        self.nueva_pedida.emit()
+        if self.integrada:
+            self.controles.alternar()
+        else:
+            self.nueva_pedida.emit()

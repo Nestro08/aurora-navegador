@@ -103,7 +103,7 @@ AJUSTES_DEFECTO = {
     "flags": "", "dormir_min": 30, "sugerir_pw": True, "proteger_pw": False, "usar_hello": True,
     "maestra": None, "grupos": {}, "sync_activa": False, "sync_carpeta": "", "sync_dispositivo": "",
     "sync_frase": "", "ia_proveedor": "Anthropic (Claude)", "ia_modelo": "claude-haiku-5-5",
-    "ia_url": "http://localhost:11434/v1", "ia_clave": "", "ia_contexto": True,
+    "ia_url": "http://localhost:11434/v1", "ia_clave": "", "ia_contexto": True, "barra_sistema": False,
 }
 NUEVA_INCOG = DATOS / "nueva-incognito.html"
 NUEVA_INCOG_URL = QUrl.fromLocalFile(str(NUEVA_INCOG)).toString()

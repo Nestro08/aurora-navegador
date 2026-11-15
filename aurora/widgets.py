@@ -170,3 +170,77 @@ class Aviso(QLabel):
         animar(self.anim_p, self.pos(), QPoint(x, y))
         animar(self.anim_o, self.efecto.opacity(), 1.0)
         self.reloj.start()
+
+
+# ═════════════════════════════ barra de título propia (Linux)
+
+class BotonVentana(QAbstractButton):
+    """Minimizar, maximizar/restaurar o cerrar, dibujados a mano para que encajen con la barra oscura."""
+
+    def __init__(self, tipo, consejo, padre=None):
+        super().__init__(padre)
+        self.tipo = tipo
+        self.setToolTip(consejo)
+        self.setFixedSize(40, 32)
+        self._h = 0.0
+        self.anim = animacion(self, self._set, 140)
+
+    def _set(self, v):
+        self._h = v
+        self.update()
+
+    def enterEvent(self, e):
+        animar(self.anim, self._h, 1.0)
+
+    def leaveEvent(self, e):
+        animar(self.anim, self._h, 0.0)
+
+    def paintEvent(self, e):
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        r = QRectF(self.rect()).adjusted(4, 2, -4, -2)
+        cerrar = self.tipo == "cerrar"
+        p.setPen(Qt.PenStyle.NoPen)
+        p.setBrush(con_alfa("#e5484d", 0.9 * self._h) if cerrar else QColor(255, 255, 255, int(22 * self._h)))
+        p.drawRoundedRect(r, 8, 8)
+        p.setPen(QPen(QColor("#ffffff") if cerrar and self._h > 0.5 else mezcla(C["tenue"], C["texto"], self._h), 1.3))
+        p.setBrush(Qt.BrushStyle.NoBrush)
+        c, s = r.center(), 5.0
+        if self.tipo == "minimizar":
+            p.drawLine(QPointF(c.x() - s, c.y()), QPointF(c.x() + s, c.y()))
+        elif self.tipo == "maximizar":
+            p.drawRoundedRect(QRectF(c.x() - s, c.y() - s, 2 * s, 2 * s), 1.5, 1.5)
+        elif self.tipo == "restaurar":
+            p.drawRoundedRect(QRectF(c.x() - s, c.y() - s + 2, 2 * s - 2, 2 * s - 2), 1.5, 1.5)
+            p.drawPolyline([QPointF(c.x() - s + 2, c.y() - s), QPointF(c.x() + s, c.y() - s),
+                            QPointF(c.x() + s, c.y() + s - 2)])
+        else:
+            p.drawLine(QPointF(c.x() - s, c.y() - s), QPointF(c.x() + s, c.y() + s))
+            p.drawLine(QPointF(c.x() - s, c.y() + s), QPointF(c.x() + s, c.y() - s))
+
+
+class ControlesVentana(QWidget):
+    def __init__(self, ventana):
+        super().__init__()
+        self.v = ventana
+        h = QHBoxLayout(self)
+        h.setContentsMargins(0, 0, 0, 0)
+        h.setSpacing(0)
+        self.minimizar = BotonVentana("minimizar", "Minimizar")
+        self.maximizar = BotonVentana("maximizar", "Maximizar")
+        self.cerrar = BotonVentana("cerrar", "Cerrar")
+        self.minimizar.clicked.connect(ventana.showMinimized)
+        self.maximizar.clicked.connect(self.alternar)
+        self.cerrar.clicked.connect(ventana.close)
+        for b in (self.minimizar, self.maximizar, self.cerrar):
+            h.addWidget(b)
+        self.setFixedSize(120, 32)
+
+    def alternar(self):
+        self.v.showNormal() if self.v.isMaximized() else self.v.showMaximized()
+
+    def actualizar(self):
+        maximizada = self.v.isMaximized()
+        self.maximizar.tipo = "restaurar" if maximizada else "maximizar"
+        self.maximizar.setToolTip("Restaurar" if maximizada else "Maximizar")
+        self.maximizar.update()
