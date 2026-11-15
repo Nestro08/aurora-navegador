@@ -62,8 +62,8 @@ class BarraFina(QWidget):
                 g.setColorAt(0, QColor("#ff6b81"))
                 g.setColorAt(1, QColor("#ff6b81"))
             elif self.pausada:
-                g.setColorAt(0, QColor("#8a90a2"))
-                g.setColorAt(1, QColor("#8a90a2"))
+                g.setColorAt(0, QColor(C["tenue"]))
+                g.setColorAt(1, QColor(C["tenue"]))
             else:
                 g.setColorAt(0, QColor(T.a1))
                 g.setColorAt(1, QColor(T.a2))
@@ -237,7 +237,7 @@ class PanelDescargas(QFrame):
         b_carpeta = QPushButton("Abrir carpeta")
         b_todas = QPushButton("Ver todas")
         b_carpeta.clicked.connect(lambda: (self.hide(), ventana.abrir_descargas()))
-        b_todas.clicked.connect(lambda: (self.hide(), ventana.abrir_ajustes(6)))
+        b_todas.clicked.connect(lambda: (self.hide(), ventana.abrir_ajustes(ventana.ajustes_ui.indice("Descargas"))))
         cab.addWidget(b_carpeta)
         cab.addWidget(b_todas)
         l.addLayout(cab)
@@ -308,6 +308,8 @@ class MixinDescargas:
             del self.lista_descargas.datos[500:]
             self.lista_descargas.guardar()
             if ok:
+                from .temas import sonidos
+                sonidos().tocar("descarga")
                 self.boton_descargas.pulso()
                 self.aviso.mostrar(f"✓  {d.downloadFileName()} descargado")
             self.boton_descargas.refrescar()

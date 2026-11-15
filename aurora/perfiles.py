@@ -38,6 +38,7 @@ class Perfil(QObject):
             self.sync = Sincronizador(self)
             self.claves.al_borrar = lambda k: self.sync.borrado("claves", k)
         self._configurar_web()
+        self.favicons = favicons()
 
     def _configurar_web(self):
         a = self.ajustes.datos
@@ -115,12 +116,13 @@ class Gestor(QObject):
             self.incognitos[base.nombre] = Perfil(base.nombre, base.carpeta, base.color, incognito=True, base=base)
         return self.incognitos[base.nombre]
 
-    def nueva_ventana(self, nombre=None, incognito=False, urls=None, restaurar=True):
+    def nueva_ventana(self, nombre=None, incognito=False, urls=None, restaurar=True, mostrar=True):
         from .ventana import Ventana
         perfil = self.incognito(nombre) if incognito else self.perfil(nombre)
         primera = not perfil.ventanas
         v = Ventana(perfil, urls=urls, restaurar=restaurar and primera and not incognito)
-        v.show()
+        if mostrar:
+            v.show()
         return v
 
     def todas_las_ventanas(self):

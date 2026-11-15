@@ -22,7 +22,7 @@ los vídeos MP4 de webs como Nike, Instagram o Twitter. El PyQt6 de pip no los t
   `xdg-settings set default-web-browser org.mozilla.firefox.desktop`.
 - Para actualizar, vuelve a ejecutar `instalar-fedora.sh` con la versión nueva.
 - Las pestañas hacen de barra de título (arrastra la zona vacía para mover la ventana, doble clic para
-  maximizar). Si prefieres la barra del sistema: *Ajustes → Apariencia*.
+  maximizar).
 - Para desinstalar: `bash desinstalar-fedora.sh`.
 
 En Linux las contraseñas se cifran con AES. La clave se guarda en el **llavero del sistema** (GNOME
@@ -57,10 +57,11 @@ pestaña nueva en la ventana que tienes. Acepta URLs y archivos como argumentos 
 | Área | Qué hay |
 |---|---|
 | Pestañas | Animadas, se reordenan arrastrando, **fijadas**, **grupos de colores con nombre** que se pliegan, indicador de sonido y silenciar (Ctrl+M), **dormir pestañas** inactivas para ahorrar memoria, **pantalla dividida** (Ctrl+Shift+D), menú con clic derecho |
-| Navegación | Paleta de comandos (Ctrl+K), página de inicio animada con accesos, buscar en la página (Ctrl+F), **modo lectura** (F9), **vídeo flotante** (Ctrl+Shift+V), gestor de **descargas** con progreso, pausa y reanudación |
+| Navegación | Pantalla de bienvenida al arrancar (desactivable en *Apariencia*), sugerencias en la barra de direcciones con iconos, pestañas abiertas, accesos e historial, paleta de comandos (Ctrl+K), página de inicio animada con **esferas** de accesos que se añaden, editan, colorean y reordenan arrastrando, buscar en la página (Ctrl+F), **modo lectura** (F9), **vídeo flotante** (Ctrl+Shift+V), gestor de **descargas** con progreso, pausa y reanudación |
 | Privacidad | Bloqueador de anuncios y rastreadores, Do Not Track y GPC, bloquear cookies de terceros, **ventana de incógnito** (Ctrl+Shift+N), **perfiles** separados (Personal, Uni…) |
 | Contraseñas | Guarda y rellena; **generador** al registrarte; cifradas (llavero de GNOME/KDE en Linux, DPAPI en Windows); **contraseña maestra** o **Windows Hello** para verlas, copiarlas o rellenarlas; importar el CSV de Chrome o Edge. Los scripts de contraseñas corren aislados de la web: ninguna página puede espiarlos ni fingir que has escrito una contraseña |
 | Desarrolladores (F12) | Inspector de Chromium, consola JS, registro de red, **cliente de API** tipo Postman, **auditoría** (accesibilidad, SEO, rendimiento, seguridad, enlaces rotos), modo responsive, User-Agent, CSS en vivo, servidor local con recarga en vivo, **cuentagotas y medidor** (Ctrl+Shift+X), **captura de página completa**, visor de JSON |
+| Temas (Ajustes → Temas) | Tienda al estilo de Opera: 7 temas integrados (también claros), más desde la tienda en línea. Cambian los colores de toda la interfaz, el fondo de la página de inicio (animación, imagen o vídeo) y los sonidos. **Editor** para crear los tuyos y compartirlos como archivo `.aurora-tema`. Ver `tienda/README.md` |
 | Importar | Desde Chrome, Chromium, Brave, Edge o Vivaldi (*Ajustes → General* o Ctrl+K): marcadores, historial, contraseñas (también las de tu cuenta de Google), buscador y sesiones iniciadas. Las contraseñas se descifran con la clave del navegador y se vuelven a cifrar con la de Aurora |
 | Sincronización | Accesos, historial y contraseñas entre tus PCs (Windows y Linux) a través de una carpeta de OneDrive, Dropbox, Syncthing… Con una frase de paso, las contraseñas y el historial viajan cifrados con AES |
 | Extensiones | Userscripts `.user.js` (compatibles con Tampermonkey), estilos `.user.css` y extensiones en Python con API propia (solo se ejecutan si las apruebas). Incluye 4 de ejemplo |
@@ -121,7 +122,11 @@ aurora/
   perfiles.py           perfiles, incógnito y gestor de ventanas
   sincronizacion.py · extensiones.py · asistente.py
   ajustes.py · estilo.py   pantalla de ajustes y hoja de estilo
-herramientas/           icono y versión del .exe
+  temas.py · tienda_temas.py   temas, sonidos, tienda en línea y editor
+  arranque.py           pantalla de bienvenida
+  importar.py           importar desde Chrome, Brave, Edge…
+herramientas/           icono, versión del .exe y publicar_tienda.py
+tienda/                 temas de la tienda en línea (ver tienda/README.md)
 instalador/aurora.iss   instalador de Inno Setup
 tests/                  pruebas (pytest)
 ```

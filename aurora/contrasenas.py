@@ -17,6 +17,7 @@ CIFRADO_REAL = sys.platform == "win32"  # en Linux se decide al usar el llavero 
 MUNDO_AURORA = QWebEngineScript.ScriptWorldId.ApplicationWorld
 MSG_PW = f"__aurora_pw_{TOKEN_PUENTE}__"
 MSG_GEN = f"__aurora_gen_{TOKEN_PUENTE}__"
+MSG_NT = f"__aurora_inicio_{TOKEN_PUENTE}__"  # esferas de la página de inicio
 
 JS_CAPTURA = r"""(()=>{if(window.__aurora_pw)return;window.__aurora_pw=1;let ultimo='';
 const ss=(k,v)=>{try{return v===undefined?sessionStorage.getItem(k):sessionStorage.setItem(k,v)}catch(e){return null}};

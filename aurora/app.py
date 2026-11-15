@@ -2,6 +2,9 @@
 import getpass
 
 from .ventana import *  # noqa: F401,F403
+from . import temas
+from .temas import Apariencia, aplicar_colores, paleta_qt
+from .arranque import PantallaArranque
 
 SERVIDOR = f"aurora-{getpass.getuser()}"
 
@@ -92,20 +95,34 @@ def main():
     fuente.setFamilies(["Segoe UI Variable Text", "Segoe UI", "Inter", "Noto Sans"])
     fuente.setPointSizeF(9.75)
     app.setFont(fuente)
-    paleta = QPalette()
-    for rol, color in ((QPalette.ColorRole.Window, C["fondo"]), (QPalette.ColorRole.WindowText, C["texto"]),
-                       (QPalette.ColorRole.Base, C["chip"]), (QPalette.ColorRole.Text, C["texto"]),
-                       (QPalette.ColorRole.Button, C["chip"]), (QPalette.ColorRole.ButtonText, C["texto"]),
-                       (QPalette.ColorRole.Highlight, T.a1), (QPalette.ColorRole.HighlightedText, "#ffffff"),
-                       (QPalette.ColorRole.ToolTipBase, "#1b1f29"), (QPalette.ColorRole.ToolTipText, C["texto"]),
-                       (QPalette.ColorRole.PlaceholderText, "#6b7184")):
-        paleta.setColor(rol, QColor(color))
-    app.setPalette(paleta)
     Iconos.iniciar()
     perfil = gestor().perfil()
-    fijar_acento(perfil.ajustes.datos["acento"])
+    a = Apariencia.datos()
+    if "migrado" not in a:  # antes el acento era del perfil
+        acento = perfil.ajustes.datos.get("acento", "")
+        Apariencia.guardar(acento="" if acento in ("", "Aurora") else acento, migrado=True)
+    aplicar_colores(temas.buscar(a["tema"]), a["acento"])
+    app.setPalette(paleta_qt())
     app.setStyleSheet(hoja_estilo())
     servidor = _escuchar(app)  # noqa: F841  (se mantiene vivo mientras dure la app)
     app.aboutToQuit.connect(Almacen.volcar_pendientes)
-    gestor().nueva_ventana(urls=urls, incognito=incognito)
+    if Apariencia.datos().get("arranque", True):
+        nombre = perfil.ajustes.datos.get("nombre", "")
+        bienvenida = PantallaArranque(f"Hola, {nombre}" if nombre else "")
+        bienvenida.mostrar()
+        estado = {"ventana": None, "listo": False}
+
+        def acabar():  # cuando terminan la animación y la ventana (lo último de los dos)
+            if estado["ventana"] is not None and estado["listo"]:
+                estado["ventana"].show()
+                bienvenida.cerrar()
+
+        def crear():
+            estado["ventana"] = gestor().nueva_ventana(urls=urls, incognito=incognito, mostrar=False)
+            acabar()
+
+        bienvenida.terminado.connect(lambda: (estado.update(listo=True), acabar()))
+        QTimer.singleShot(350, crear)  # Chromium tarda en arrancar: se hace con el logo ya en pantalla
+    else:
+        gestor().nueva_ventana(urls=urls, incognito=incognito)
     sys.exit(app.exec())

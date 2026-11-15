@@ -38,12 +38,12 @@ class BotonIcono(QAbstractButton):
         if marcado:
             fondo = con_alfa(T.a1, 0.30 + 0.15 * self._h)
         else:
-            fondo = QColor(255, 255, 255, int(20 * self._h + (14 if self.isDown() else 0)))
+            fondo = velo(20 * self._h + (14 if self.isDown() else 0))
         p.setPen(Qt.PenStyle.NoPen)
         p.setBrush(fondo)
         p.drawRoundedRect(r, 9, 9)
         if not self.isEnabled():
-            color = QColor("#4a5060")
+            color = QColor(C["apagado"])
         elif self.isChecked() and self.color_marcado:
             color = QColor(self.color_marcado)
         else:
@@ -83,7 +83,7 @@ class Interruptor(QAbstractButton):
                    Qt.AlignmentFlag.AlignVCenter | Qt.AlignmentFlag.AlignLeft, self.text())
         pista = QRectF(self.width() - 42, (self.height() - 22) / 2, 40, 22)
         p.setPen(Qt.PenStyle.NoPen)
-        p.setBrush(mezcla("#343a48", T.a1, self._p))
+        p.setBrush(mezcla(C["interruptor"], T.a1, self._p))
         p.drawRoundedRect(pista, 11, 11)
         x = pista.left() + 3 + (pista.width() - 22) * self._p
         p.setBrush(QColor("#ffffff"))
@@ -201,7 +201,7 @@ class BotonVentana(QAbstractButton):
         r = QRectF(self.rect()).adjusted(4, 2, -4, -2)
         cerrar = self.tipo == "cerrar"
         p.setPen(Qt.PenStyle.NoPen)
-        p.setBrush(con_alfa("#e5484d", 0.9 * self._h) if cerrar else QColor(255, 255, 255, int(22 * self._h)))
+        p.setBrush(con_alfa("#e5484d", 0.9 * self._h) if cerrar else velo(22 * self._h))
         p.drawRoundedRect(r, 8, 8)
         p.setPen(QPen(QColor("#ffffff") if cerrar and self._h > 0.5 else mezcla(C["tenue"], C["texto"], self._h), 1.3))
         p.setBrush(Qt.BrushStyle.NoBrush)
@@ -244,3 +244,104 @@ class ControlesVentana(QWidget):
         self.maximizar.tipo = "restaurar" if maximizada else "maximizar"
         self.maximizar.setToolTip("Restaurar" if maximizada else "Maximizar")
         self.maximizar.update()
+
+
+# ═════════════════════════════ iconos de webs
+
+def tono_de(texto):
+    """Un matiz estable por texto (el mismo dominio siempre tiene el mismo color)."""
+    return sum(map(ord, texto)) * 37 % 360
+
+
+class Favicons(QObject):
+    """Iconos de las webs visitadas, guardados en ~/.aurora/favicons cuando una pestaña los recibe.
+
+    (No se usa QWebEngineProfile.requestIconForPageURL: en PyQt6 6.11 cuelga el proceso.)"""
+    listo = pyqtSignal(str)  # host
+    CARPETA = DATOS / "favicons"
+
+    def __init__(self):
+        super().__init__()
+        self.cache = {}
+
+    @staticmethod
+    def host(url):
+        return QUrl(url).host().removeprefix("www.")
+
+    def ruta(self, host):
+        return self.CARPETA / (re.sub(r"[^a-z0-9.-]", "_", host.lower()) + ".png")
+
+    def icono(self, url):
+        """El QIcon de la web, o None si aún no se conoce."""
+        h = self.host(url)
+        if not h:
+            return None
+        if h not in self.cache:
+            r = self.ruta(h)
+            self.cache[h] = QIcon(str(r)) if r.exists() else None
+        return self.cache[h]
+
+    def guardar(self, url, icono):
+        h = self.host(url)
+        if not h or icono is None or icono.isNull():
+            return
+        pm = icono.pixmap(32, 32)
+        if pm.isNull():
+            return
+        self.CARPETA.mkdir(exist_ok=True)
+        pm.save(str(self.ruta(h)), "PNG")
+        nuevo = self.cache.get(h) is None
+        self.cache[h] = QIcon(pm)
+        if nuevo:
+            self.listo.emit(h)
+
+    def borrar_todo(self):
+        self.cache.clear()
+        for f in self.CARPETA.glob("*.png") if self.CARPETA.exists() else []:
+            f.unlink()
+
+
+_FAVICONS = None
+
+
+def favicons():
+    global _FAVICONS
+    if _FAVICONS is None:
+        _FAVICONS = Favicons()
+    return _FAVICONS
+
+
+def nombre_sitio(host):
+    """«es.wikipedia.org» → «wikipedia»; «developer.mozilla.org» → «mozilla»."""
+    partes = [x for x in host.lower().split(".") if x]
+    if len(partes) >= 3 and partes[-2] in ("co", "com", "org", "gov", "edu", "ac") and len(partes[-1]) == 2:
+        return partes[-3]
+    return partes[-2] if len(partes) >= 2 else (partes[0] if partes else host)
+
+
+def pintar_avatar(p, r, texto, icono=None, redondo=True):
+    """Favicon sobre un fondo suave, o la inicial sobre un degradado con el color del sitio."""
+    p.save()
+    p.setRenderHint(QPainter.RenderHint.Antialiasing)
+    p.setPen(Qt.PenStyle.NoPen)
+    radio = r.width() / 2 if redondo else r.width() * 0.28
+    if icono is not None:
+        p.setBrush(velo(22))
+        p.drawRoundedRect(r, radio, radio)
+        m = r.width() * 0.2
+        icono.paint(p, r.adjusted(m, m, -m, -m).toRect())
+    else:
+        texto = nombre_sitio(texto) if "." in texto and " " not in texto else texto
+        tono = tono_de(texto)
+        g = QLinearGradient(r.topLeft(), r.bottomRight())
+        g.setColorAt(0, QColor.fromHsl(tono, 190, 135))
+        g.setColorAt(1, QColor.fromHsl((tono + 45) % 360, 170, 100))
+        p.setBrush(g)
+        p.drawRoundedRect(r, radio, radio)
+        f = QFont(p.font())
+        f.setPixelSize(int(r.height() * 0.46))
+        f.setWeight(QFont.Weight.DemiBold)
+        p.setFont(f)
+        p.setPen(QColor("white"))
+        p.drawText(r, Qt.AlignmentFlag.AlignCenter, (texto.strip() or "?")[0].upper())
+    p.restore()

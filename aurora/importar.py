@@ -18,6 +18,7 @@ from PyQt6.QtCore import QDateTime
 from PyQt6.QtNetwork import QNetworkCookie
 
 from .contrasenas import *  # noqa: F401,F403
+from .contrasenas import _dpapi
 
 NAVEGADORES_LINUX = [("Google Chrome", "google-chrome", "Chrome"), ("Chromium", "chromium", "Chromium"),
                      ("Brave", "BraveSoftware/Brave-Browser", "Brave"), ("Microsoft Edge", "microsoft-edge",

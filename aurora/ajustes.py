@@ -1,4 +1,6 @@
 """Pantalla de ajustes."""
+from PyQt6.QtCore import QDate, QLocale
+
 from .comun import *  # noqa: F401,F403
 from .widgets import *  # noqa: F401,F403
 from .pestanas import *  # noqa: F401,F403
@@ -10,6 +12,8 @@ from .contrasenas import *  # noqa: F401,F403
 from .perfiles import *  # noqa: F401,F403
 from .asistente import IAS_WEB, MODO_API, PROVEEDORES, ClienteIA
 from .importar import DialogoImportar
+from . import tienda_temas
+from .temas import ACENTOS as _ACENTOS, Apariencia
 
 
 # ═════════════════════════════ pantalla de ajustes
@@ -41,7 +45,7 @@ class Muestra(QAbstractButton):
         p = QPainter(self)
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
         if self.isChecked():
-            p.setPen(QPen(QColor(255, 255, 255, 220), 2))
+            p.setPen(QPen(con_alfa(C["texto"], 0.85), 2))
             p.setBrush(Qt.BrushStyle.NoBrush)
             p.drawEllipse(QRectF(2, 2, 38, 38))
         m = 7 - 1.5 * self._h
@@ -169,7 +173,7 @@ class DelegadoNav(QStyledItemDelegate):
                 g.setColorAt(1, con_alfa(T.a2, 0.08))
                 p.setBrush(g)
             else:
-                p.setBrush(QColor(255, 255, 255, 12))
+                p.setBrush(velo(12))
             p.drawRoundedRect(r, 10, 10)
         if seleccionado:
             p.setPen(Qt.PenStyle.NoPen)
@@ -182,6 +186,142 @@ class DelegadoNav(QStyledItemDelegate):
         p.setPen(QColor(C["texto"]))
         p.drawText(QRectF(r.left() + 46, r.top(), r.width() - 50, r.height()), Qt.AlignmentFlag.AlignVCenter, texto)
         p.restore()
+
+
+class DelegadoHistorial(QStyledItemDelegate):
+    """Fila del historial: icono de la web, título, dominio y hora; cabeceras por día."""
+
+    def __init__(self, favicons, padre):
+        super().__init__(padre)
+        self.favicons = favicons
+
+    def sizeHint(self, opcion, indice):
+        d = indice.data(Qt.ItemDataRole.UserRole) or {}
+        return QSize(0, 40 if "cab" in d else 54)
+
+    def paint(self, p, opcion, indice):
+        d = indice.data(Qt.ItemDataRole.UserRole) or {}
+        p.save()
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        r = QRectF(opcion.rect)
+        if "cab" in d:
+            f = QFont(opcion.font)
+            f.setPointSizeF(f.pointSizeF() * 0.9)
+            f.setWeight(QFont.Weight.Bold)
+            p.setFont(f)
+            p.setPen(QColor(T.a2))
+            p.drawText(r.adjusted(6, 0, 0, -6), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignBottom, d["cab"])
+            p.restore()
+            return
+        h = d["h"]
+        fila = r.adjusted(2, 3, -2, -3)
+        seleccionado = bool(opcion.state & QStyle.StateFlag.State_Selected)
+        encima = bool(opcion.state & QStyle.StateFlag.State_MouseOver)
+        if seleccionado or encima:
+            p.setPen(Qt.PenStyle.NoPen)
+            if seleccionado:
+                g = QLinearGradient(fila.left(), 0, fila.right(), 0)
+                g.setColorAt(0, con_alfa(T.a1, 0.28))
+                g.setColorAt(1, con_alfa(T.a2, 0.06))
+                p.setBrush(g)
+            else:
+                p.setBrush(velo(14))
+            p.drawRoundedRect(fila, 12, 12)
+        url = QUrl(h["url"])
+        host = url.host().removeprefix("www.")
+        pintar_avatar(p, QRectF(fila.left() + 12, fila.center().y() - 15, 30, 30), host,
+                      self.favicons.icono(h["url"]), redondo=False)
+        hora = h.get("fecha", "")[-5:]
+        fm = QFontMetrics(opcion.font)
+        derecha = fila.right() - 14 - fm.horizontalAdvance(hora)
+        izq = fila.left() + 56
+        p.setPen(QColor(C["tenue"]))
+        p.setFont(opcion.font)
+        p.drawText(QRectF(derecha, fila.top(), fila.right() - derecha - 12, fila.height()),
+                   Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter, hora)
+        ancho = derecha - izq - 16
+        titulo = QFont(opcion.font)
+        titulo.setWeight(QFont.Weight.DemiBold)
+        p.setFont(titulo)
+        p.setPen(QColor(C["texto"]))
+        p.drawText(QRectF(izq, fila.top() + 7, ancho, 20), Qt.AlignmentFlag.AlignVCenter,
+                   QFontMetrics(titulo).elidedText(h.get("titulo") or h["url"], Qt.TextElideMode.ElideRight, int(ancho)))
+        p.setFont(opcion.font)
+        resto = url.toString(QUrl.UrlFormattingOption.RemoveScheme).removeprefix("//").removeprefix(url.host())
+        p.setPen(QColor(T.a2))
+        p.drawText(QRectF(izq, fila.top() + 27, ancho, 18), Qt.AlignmentFlag.AlignVCenter, host)
+        w = fm.horizontalAdvance(host)
+        p.setPen(QColor(C["tenue"]))
+        p.drawText(QRectF(izq + w, fila.top() + 27, max(0, ancho - w), 18), Qt.AlignmentFlag.AlignVCenter,
+                   fm.elidedText(resto, Qt.TextElideMode.ElideRight, int(max(0, ancho - w))))
+        p.restore()
+
+
+class Avatar(QWidget):
+    def __init__(self, url, favicons, tam=38):
+        super().__init__()
+        self.url, self.favicons = url, favicons
+        self.setFixedSize(tam, tam)
+        favicons.listo.connect(lambda h: self.update() if h == Favicons.host(url) else None)
+
+    def paintEvent(self, e):
+        p = QPainter(self)
+        pintar_avatar(p, QRectF(self.rect()), Favicons.host(self.url), self.favicons.icono(self.url), redondo=False)
+
+
+class FilaClave(QFrame):
+    """Una cuenta guardada: icono de la web, sitio, usuario, contraseña oculta, avisos y acciones."""
+
+    def __init__(self, ajustes, cuenta, avisos, al_cambiar, editar):
+        super().__init__(objectName="filaClave")
+        v, claves, c = ajustes.v, ajustes.v.claves, cuenta
+        h = QHBoxLayout(self)
+        h.setContentsMargins(14, 10, 10, 10)
+        h.setSpacing(12)
+        h.addWidget(Avatar(c["origen"], v.p.favicons))
+        textos = QVBoxLayout()
+        textos.setSpacing(2)
+        sitio = QHBoxLayout()
+        sitio.setSpacing(6)
+        nombre = QLabel(f"<b>{html.escape(c['origen'].split('://')[-1])}</b>")
+        sitio.addWidget(nombre)
+        for texto, estilo in avisos:
+            sitio.addWidget(QLabel(texto, objectName=estilo))
+        sitio.addStretch()
+        textos.addLayout(sitio)
+        textos.addWidget(QLabel(html.escape(c["usuario"]) or "<i>sin usuario</i>", objectName="tenue"))
+        h.addLayout(textos, 1)
+        self.pill = QLabel("•" * 12, objectName="pillClave")
+        self.pill.setFont(fuente_mono(9.5))
+        self.pill.setMinimumWidth(150)
+        self.pill.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        h.addWidget(self.pill)
+
+        def alternar():
+            if not self.pill.text().startswith("•"):
+                self.pill.setText("•" * 12)
+            elif v.p.verificador.comprobar(ajustes, "mostrar una contraseña"):
+                self.pill.setText(claves.clave(c))
+
+        def copiar():
+            if v.p.verificador.comprobar(ajustes, "copiar una contraseña"):
+                QApplication.clipboard().setText(claves.clave(c))
+                v.aviso.mostrar("🔑  Contraseña copiada")
+
+        def borrar():
+            if QMessageBox.question(ajustes, "Borrar contraseña", f"¿Borrar la contraseña de "
+                                    f"{c['usuario'] or 'la cuenta'} en {c['origen'].split('://')[-1]}?") \
+                    == QMessageBox.StandardButton.Yes:
+                claves.borrar(c)
+                v._llave()
+                al_cambiar()
+
+        for icono, consejo, funcion in (("ojo", "Mostrar / ocultar", alternar), ("copiar", "Copiar", copiar),
+                                        ("abrir", "Abrir la web", lambda: (v.nueva_pestana(c["origen"]), ajustes.cerrar())),
+                                        ("editar", "Editar", lambda: editar(c)), ("borrar", "Borrar", borrar)):
+            b = BotonIcono(icono, consejo, tam=32)
+            b.clicked.connect(funcion)
+            h.addWidget(b)
 
 
 class DialogoCuenta(QDialog):
@@ -205,7 +345,7 @@ class DialogoCuenta(QDialog):
 
 class Ajustes(QWidget):
     """Pantalla de ajustes: hoja flotante con menú lateral y secciones."""
-    SECCIONES = [("General", "ajustes"), ("Apariencia", "pincel"), ("Privacidad y seguridad", "escudo"),
+    SECCIONES = [("General", "ajustes"), ("Apariencia", "pincel"), ("Temas", "tienda"), ("Privacidad y seguridad", "escudo"),
                  ("Contraseñas", "llave"), ("Historial", "reloj"), ("Accesos", "estrella"),
                  ("Descargas", "descarga"), ("Perfiles", "perfil"), ("Sincronización", "sync"),
                  ("Extensiones", "extension"), ("Asistente IA", "ia"), ("Desarrolladores", "dev"),
@@ -356,7 +496,7 @@ class Ajustes(QWidget):
             w = self.paginas.widget(0)
             self.paginas.removeWidget(w)
             w.deleteLater()
-        for f in (self._general, self._apariencia, self._privacidad, self._contrasenas, self._historial,
+        for f in (self._general, self._apariencia, self._temas, self._privacidad, self._contrasenas, self._historial,
                   self._accesos, self._descargas, self._perfiles, self._sincronizacion, self._extensiones,
                   self._asistente, self._desarrolladores, self._acerca):
             self.paginas.addWidget(f())
@@ -453,9 +593,12 @@ class Ajustes(QWidget):
         hc.setContentsMargins(0, 0, 0, 0)
         hc.setSpacing(6)
         muestras = []
-        for nombre, (a1, a2) in ACENTOS.items():
+        tema = Apariencia.tema
+        opciones = {"": (tema["colores"]["acento1"], tema["colores"]["acento2"])} | dict(_ACENTOS)
+        for nombre, (a1, a2) in opciones.items():
             m = Muestra(nombre, a1, a2)
-            m.setChecked(nombre == a["acento"])
+            m.setToolTip(nombre or "El del tema")
+            m.setChecked(nombre == Apariencia.datos()["acento"])
             muestras.append(m)
             hc.addWidget(m)
 
@@ -467,13 +610,26 @@ class Ajustes(QWidget):
         hc.addStretch()
         for m in muestras:
             m.clicked.connect(lambda _, n=m.nombre: elegir(n))
-        t.fila("Color de acento", "Pestañas, botones, brillos y página de inicio.")
+        t.fila("Color de acento", "El primero es el del tema. Los colores de fondo se cambian en Temas.")
         t.contenido(caja, 18)
-        if sys.platform != "win32":
-            t.fila("Usar la barra de título del sistema",
-                   "Por defecto las pestañas hacen de barra de título, como en Chrome o Firefox. "
-                   "Se aplica en las ventanas nuevas.",
-                   interruptor(a["barra_sistema"], lambda c: v.set_ajuste("barra_sistema", c)))
+        l.addWidget(t)
+
+        self._sub(l, "Pantalla de arranque")
+        t = Tarjeta()
+        fila_arranque = t.fila("Mostrar la bienvenida al abrir Aurora",
+                               "El logo con su animación de carga y «From developer for developers» mientras Aurora "
+                               "se prepara.",
+                               interruptor(Apariencia.datos().get("arranque", True),
+                                           lambda c: Apariencia.guardar(arranque=c)))
+
+        def ver_arranque():
+            from .arranque import PantallaArranque
+            nombre = a.get("nombre", "")
+            p = PantallaArranque(f"Hola, {nombre}" if nombre else "")
+            p.terminado.connect(lambda: QTimer.singleShot(500, p.cerrar))
+            p.mostrar()
+
+        fila_arranque.layout().addWidget(botones(("Ver ahora", ver_arranque)))
         l.addWidget(t)
 
         self._sub(l, "Página de inicio")
@@ -495,6 +651,11 @@ class Ajustes(QWidget):
                            lambda z: v.set_ajuste("zoom", int(z.split()[0]) / 100)))
         l.addWidget(t)
         l.addStretch()
+        return sa
+
+    def _temas(self):
+        sa, l = self._pagina()
+        tienda_temas.seccion_temas(self, l)
         return sa
 
     def _privacidad(self):
@@ -618,43 +779,74 @@ class Ajustes(QWidget):
         generada.layout().addWidget(botones(("Generar y copiar", generar)))
         l.addWidget(t)
 
-        self._sub(l, f"Contraseñas guardadas ({len(claves.datos['cuentas'])})")
+        # revisión de seguridad: se calcula en local, sin mostrar ninguna contraseña
+        planas = {id(c): claves.leer_clave(c) for c in claves.datos["cuentas"]}
+        usos = {}
+        for c in claves.datos["cuentas"]:
+            if planas[id(c)]:
+                usos[planas[id(c)]] = usos.get(planas[id(c)], 0) + 1
+
+        def debil(clave):
+            tipos = sum(bool(re.search(x, clave)) for x in (r"[a-z]", r"[A-Z]", r"\d", r"[^\w]"))
+            return len(clave) < 8 or (len(clave) < 12 and tipos < 3)
+
+        riesgo = {id(c): ([("Reutilizada", "etiquetaRiesgo")] if usos.get(planas[id(c)], 0) > 1 else [])
+                  + ([("Débil", "etiquetaPeligro")] if planas[id(c)] and debil(planas[id(c)]) else [])
+                  for c in claves.datos["cuentas"]}
+        resumen = QFrame(objectName="resumenClaves")
+        hr = QHBoxLayout(resumen)
+        hr.setContentsMargins(22, 16, 22, 16)
+        hr.setSpacing(34)
+        for cifra, texto, color in ((len(claves.datos["cuentas"]), "guardadas", C["texto"]),
+                                    (sum(1 for r in riesgo.values() if any(e == "Reutilizada" for e, _ in r)),
+                                     "reutilizadas", "#e0a93b"),
+                                    (sum(1 for r in riesgo.values() if any(e == "Débil" for e, _ in r)), "débiles", "#ff6b81")):
+            caja = QVBoxLayout()
+            caja.setSpacing(0)
+            numero = QLabel(str(cifra), objectName="cifraGrande")
+            numero.setStyleSheet(f"color:{color}" if cifra else "")
+            caja.addWidget(numero)
+            caja.addWidget(QLabel(texto, objectName="tenue"))
+            hr.addLayout(caja)
+        hr.addStretch()
+        consejo = QLabel("Cambia primero las reutilizadas: si una web sufre una filtración, sirven para entrar en las "
+                         "demás." if any(riesgo.values()) else "✓ Todo en orden: ninguna repetida ni débil.",
+                         objectName="tenue")
+        consejo.setWordWrap(True)
+        consejo.setMaximumWidth(330)
+        hr.addWidget(consejo)
+        self._sub(l, "Revisión de seguridad")
+        l.addWidget(resumen)
+
+        self._sub(l, "Contraseñas guardadas")
         barra = QHBoxLayout()
         buscar = QLineEdit(placeholderText="Buscar sitio o usuario…")
         barra.addWidget(buscar, 1)
-        tabla = nueva_tabla(["Sitio", "Usuario", "Contraseña", ""], 0)
+        filtro = QComboBox()
+        filtro.addItems(["Todas", "Con problemas"])
+        barra.addWidget(filtro)
+        contenedor = QWidget()
+        filas = QVBoxLayout(contenedor)
+        filas.setContentsMargins(0, 4, 0, 0)
+        filas.setSpacing(8)
 
         def rellenar():
-            tabla.setRowCount(0)
+            while filas.count():
+                w = filas.takeAt(0).widget()
+                if w:
+                    w.deleteLater()
             q = buscar.text().lower()
+            solo_riesgo = filtro.currentIndex() == 1
             for c in sorted(claves.datos["cuentas"], key=lambda c: c["origen"]):
-                if q and q not in (c["origen"] + c["usuario"]).lower():
+                if q and q not in (c["origen"] + c["usuario"]).lower() or solo_riesgo and not riesgo.get(id(c)):
                     continue
-                f = tabla.rowCount()
-                tabla.insertRow(f)
-                tabla.setItem(f, 0, QTableWidgetItem(c["origen"].split("://")[-1]))
-                tabla.setItem(f, 1, QTableWidgetItem(c["usuario"] or "—"))
-                celda = QTableWidgetItem("•" * 10)
-                tabla.setItem(f, 2, celda)
-                acciones = QWidget()
-                ha = QHBoxLayout(acciones)
-                ha.setContentsMargins(4, 0, 4, 0)
-                ha.setSpacing(0)
-                ver = BotonIcono("ojo", "Mostrar / ocultar", tam=30)
-                copiar = BotonIcono("copiar", "Copiar contraseña", tam=30)
-                editar = BotonIcono("editar", "Editar", tam=30)
-                borrar = BotonIcono("borrar", "Borrar", tam=30)
-                ver.clicked.connect(lambda _, c=c, it=celda: it.setText("•" * 10) if not it.text().startswith("•")
-                                    else it.setText(claves.clave(c)) if v.p.verificador.comprobar(
-                                        self, "mostrar una contraseña") else None)
-                copiar.clicked.connect(lambda _, c=c: (QApplication.clipboard().setText(claves.clave(c)),
-                                                       v.aviso.mostrar("🔑  Contraseña copiada"))
-                                       if v.p.verificador.comprobar(self, "copiar una contraseña") else None)
-                editar.clicked.connect(lambda _, c=c: editar_cuenta(c))
-                borrar.clicked.connect(lambda _, c=c: (claves.borrar(c), rellenar(), v._llave()))
-                for b in (ver, copiar, editar, borrar):
-                    ha.addWidget(b)
-                tabla.setCellWidget(f, 3, acciones)
+                filas.addWidget(FilaClave(self, c, riesgo.get(id(c), []), rellenar, editar_cuenta))
+            if not filas.count():
+                vacio = QLabel("No hay contraseñas que coincidan." if q or solo_riesgo else
+                               "Aún no has guardado ninguna. Aurora te lo ofrecerá al iniciar sesión en una web, o "
+                               "impórtalas desde Chrome en Ajustes → General.", objectName="tenue")
+                vacio.setWordWrap(True)
+                filas.addWidget(vacio)
 
         def editar_cuenta(c=None):
             if c and not v.p.verificador.comprobar(self, "editar una contraseña"):
@@ -705,8 +897,9 @@ class Ajustes(QWidget):
         barra.addWidget(botones(("＋  Añadir", lambda: editar_cuenta()), ("Importar CSV…", importar),
                                 ("Exportar…", exportar)))
         buscar.textChanged.connect(rellenar)
+        filtro.currentIndexChanged.connect(rellenar)
         l.addLayout(barra)
-        l.addWidget(tabla, 1)
+        l.addWidget(contenedor)
         rellenar()
         n_nunca = len(claves.datos["nunca"])
         if n_nunca:
@@ -727,35 +920,64 @@ class Ajustes(QWidget):
         contador = QLabel(objectName="tenue")
         barra.addWidget(buscar, 1)
         barra.addWidget(contador)
-        tabla = nueva_tabla(["Fecha", "Título", "Dirección"], 1)
-        tabla.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
-        tabla.setMinimumHeight(520)
+        lista = QListWidget(objectName="listaHistorial")
+        lista.setItemDelegate(DelegadoHistorial(v.p.favicons, lista))
+        lista.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
+        lista.setVerticalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
+        lista.setMouseTracking(True)
+        lista.setMinimumHeight(540)
+        lista.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        v.p.favicons.listo.connect(lambda _: lista.viewport().update())
+        hoy = datetime.now().date()
+        es = QLocale(QLocale.Language.Spanish)
+
+        def dia(fecha):
+            try:
+                d = datetime.strptime(fecha, "%d/%m/%Y %H:%M").date()
+            except ValueError:
+                return "Sin fecha"
+            if d == hoy:
+                return "Hoy"
+            if (hoy - d).days == 1:
+                return "Ayer"
+            texto = es.toString(QDate(d.year, d.month, d.day), "dddd, d 'de' MMMM" + (" 'de' yyyy" if d.year != hoy.year else ""))
+            return texto[:1].upper() + texto[1:]
 
         def rellenar():
-            tabla.setRowCount(0)
+            lista.clear()
             q = buscar.text().lower().split()
-            datos = v.historial.datos
+            datos, previo, n = v.historial.datos, None, 0
             for i, h in enumerate(datos):
                 s = f"{h.get('titulo', '')} {h['url']}".lower()
                 if q and not all(p in s for p in q):
                     continue
-                f = tabla.rowCount()
-                tabla.insertRow(f)
-                for col, texto in enumerate((h.get("fecha", ""), h.get("titulo") or h["url"], h["url"])):
-                    it = QTableWidgetItem(texto)
-                    it.setData(Qt.ItemDataRole.UserRole, i)
-                    if col != 1:
-                        it.setForeground(QColor(C["tenue"]))
-                    tabla.setItem(f, col, it)
-                if f >= 1500:
+                grupo = dia(h.get("fecha", ""))
+                if grupo != previo:
+                    cab = QListWidgetItem()
+                    cab.setData(Qt.ItemDataRole.UserRole, {"cab": grupo})
+                    cab.setFlags(Qt.ItemFlag.NoItemFlags)
+                    lista.addItem(cab)
+                    previo = grupo
+                it = QListWidgetItem()
+                it.setData(Qt.ItemDataRole.UserRole, {"h": h, "i": i})
+                lista.addItem(it)
+                n += 1
+                if n >= 1500:
                     break
             contador.setText(f"{len(datos)} entradas ")
 
-        def borrar_sel():
-            indices = sorted({tabla.item(i.row(), 0).data(Qt.ItemDataRole.UserRole)
-                              for i in tabla.selectionModel().selectedRows()}, reverse=True)
-            for i in indices:
+        def seleccion():
+            return [it.data(Qt.ItemDataRole.UserRole) for it in lista.selectedItems()
+                    if "h" in it.data(Qt.ItemDataRole.UserRole)]
+
+        def borrar(entradas):
+            for i in sorted({e["i"] for e in entradas}, reverse=True):
                 del v.historial.datos[i]
+            v.historial.guardar()
+            rellenar()
+
+        def borrar_sitio(host):
+            v.historial.datos[:] = [h for h in v.historial.datos if QUrl(h["url"]).host() != host]
             v.historial.guardar()
             rellenar()
 
@@ -763,16 +985,38 @@ class Ajustes(QWidget):
             v.borrar_historial()
             rellenar()
 
-        def abrir(f, _c=None):
-            v.nueva_pestana(tabla.item(f, 2).text())
-            self.cerrar()
+        def abrir(it):
+            d = it.data(Qt.ItemDataRole.UserRole)
+            if d and "h" in d:
+                v.nueva_pestana(d["h"]["url"])
+                self.cerrar()
 
-        barra.addWidget(botones(("Borrar seleccionados", borrar_sel), ("Borrar todo", borrar_todo, "peligro")))
+        def menu(pos):
+            it = lista.itemAt(pos)
+            d = it.data(Qt.ItemDataRole.UserRole) if it else None
+            if not d or "h" not in d:
+                return
+            if not it.isSelected():
+                lista.setCurrentItem(it)
+            url = d["h"]["url"]
+            host = QUrl(url).host()
+            m = menu_bonito(QMenu(self))
+            m.addAction("Abrir en una pestaña nueva", lambda: abrir(it))
+            m.addAction("Copiar enlace", lambda: QApplication.clipboard().setText(url))
+            m.addSeparator()
+            m.addAction("Borrar" if len(seleccion()) < 2 else f"Borrar las {len(seleccion())} seleccionadas",
+                        lambda: borrar(seleccion()))
+            m.addAction(f"Borrar todo lo de {host}", lambda: borrar_sitio(host))
+            m.exec(lista.viewport().mapToGlobal(pos))
+
+        QShortcut(QKeySequence(Qt.Key.Key_Delete), lista, lambda: borrar(seleccion()))
+        barra.addWidget(botones(("Borrar seleccionadas", lambda: borrar(seleccion())), ("Borrar todo", borrar_todo, "peligro")))
         buscar.textChanged.connect(rellenar)
-        tabla.cellDoubleClicked.connect(abrir)
+        lista.itemActivated.connect(abrir)
+        lista.customContextMenuRequested.connect(menu)
         l.addLayout(barra)
-        l.addWidget(QLabel("Doble clic para abrir · Ctrl/Shift para seleccionar varias", objectName="tenue"))
-        l.addWidget(tabla, 1)
+        l.addWidget(QLabel("Doble clic para abrir · clic derecho para más opciones · Supr para borrar", objectName="tenue"))
+        l.addWidget(lista, 1)
         rellenar()
         return sa
 
@@ -1234,3 +1478,7 @@ class Ajustes(QWidget):
         l.addWidget(t)
         l.addStretch()
         return sa
+
+
+tienda_temas.Tarjeta_, tienda_temas.interruptor_, tienda_temas.desplegable_ = Tarjeta, interruptor, desplegable
+tienda_temas.botones = botones

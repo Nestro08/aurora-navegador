@@ -161,6 +161,9 @@ class Sincronizador(QObject):
                     orden.append(m["url"])
                 if actual is None or m.get("ts", 0) > actual.get("ts", 0):
                     locales[m["url"]] = {"url": m["url"], "titulo": m.get("titulo", m["url"]), "ts": m.get("ts", 0)}
+                    for extra in ("color", "icono"):  # esferas personalizadas
+                        if isinstance(m.get(extra), str) and m[extra]:
+                            locales[m["url"]][extra] = m[extra][:7 if extra == "color" else 4]
         self.p.marcadores.datos = [locales[u] for u in orden
                                    if u in locales and borr_m.get(u, 0) <= locales[u].get("ts", 0)]
         self.p.marcadores.guardar()

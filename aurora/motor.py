@@ -131,14 +131,14 @@ class PaginaWeb(QWidget):
             p.fillRect(QRectF(0, 0, self.width(), 3), g)
         if self._actual is None:
             return
-        p.setPen(QColor(255, 255, 255, 16))
+        p.setPen(velo(16))
         for x in range(11, self.width(), 22):
             for y in range(11, self.height(), 22):
                 p.drawPoint(x, y)
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
         marco = QRectF(self.vista.geometry()).adjusted(-7, -7, 7, 7)
-        p.setPen(QPen(QColor("#323949"), 1.5))
-        p.setBrush(QColor("#151922"))
+        p.setPen(QPen(QColor(C["borde_fuerte"]), 1.5))
+        p.setBrush(QColor(C["tarjeta"]))
         p.drawRoundedRect(marco, 16, 16)
         if self.disp:
             p.setPen(QColor(C["tenue"]))

@@ -1,0 +1,4 @@
+{"id": "oceano-profundo", "nombre": "Océano profundo", "autor": "Aurora", "version": "1.0",
+ "descripcion": "Azules abisales con una imagen de fondo de luz entre las olas.",
+ "colores": {"fondo": "#04121c", "texto": "#dff3ff", "acento1": "#0ea5e9", "acento2": "#2dd4bf"},
+ "fondo": {"tipo": "imagen", "archivo": "fondo.jpg", "oscurecer": 0.3}}

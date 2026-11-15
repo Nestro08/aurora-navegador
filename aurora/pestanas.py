@@ -122,7 +122,7 @@ class Chip(QWidget):
         p = QPainter(self)
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
         r = QRectF(self.rect())
-        fondo_tira = self.tira.fondo
+        fondo_tira = self.tira.fondo or C["fondo"]
         fondo = mezcla(fondo_tira, C["chip_activo"], self._a)
         fondo = mezcla(fondo, C["chip_hover"], self._h * (1 - self._a) * 0.9)
         p.setPen(Qt.PenStyle.NoPen)
@@ -165,7 +165,7 @@ class Chip(QWidget):
             ra = self.rect_audio()
             if self._sobre_audio:
                 p.setPen(Qt.PenStyle.NoPen)
-                p.setBrush(QColor(255, 255, 255, 28))
+                p.setBrush(velo(28))
                 p.drawRoundedRect(ra.adjusted(-2, -2, 2, 2), 5, 5)
             p.setPen(QColor("#ff8b9c") if self.silenciada else QColor(T.a2))
             p.setFont(Iconos.fuente(7.5 if self.fijada else 8.5))
@@ -187,7 +187,7 @@ class Chip(QWidget):
         if muestra_x and alfa > 0.02:
             if self._sobre_x:
                 p.setPen(Qt.PenStyle.NoPen)
-                p.setBrush(QColor(255, 255, 255, 28))
+                p.setBrush(velo(28))
                 p.drawRoundedRect(rx, 6, 6)
             pen = QPen(con_alfa(C["texto"], 0.85 * alfa), 1.4)
             pen.setCapStyle(Qt.PenCapStyle.RoundCap)
@@ -268,7 +268,7 @@ class Tira(QWidget):
         super().__init__(padre)
         self.setFixedHeight(46)
         self.chips, self.grupos, self.etiquetas = [], {}, {}
-        self.fondo = C["fondo"]
+        self.fondo = None  # None = el del tema (en incógnito se fija otro)
         self.ancho = 200
         self._destinos = {}
         self.integrada, self.controles, self.reserva = False, None, 0  # barra de título propia

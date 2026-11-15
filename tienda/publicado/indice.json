@@ -1,0 +1,70 @@
+{
+ "version": 1,
+ "temas": [
+  {
+   "id": "cafe",
+   "nombre": "Café",
+   "autor": "Aurora",
+   "version": "1.0",
+   "descripcion": "Claro y cálido, con tonos de café con leche.",
+   "colores": {
+    "fondo": "#f3ece3",
+    "texto": "#2e221a",
+    "acento1": "#b4632b",
+    "acento2": "#d9a05b"
+   },
+   "animacion": "aurora",
+   "sonidos": {
+    "paquete": "suave"
+   },
+   "archivo": "cafe.aurora-tema",
+   "miniatura": "cafe.png",
+   "sha256": "65e4f9cd508fd146fe78b09e9b18c7690161d94966ab38d549f23e1143d5efd4",
+   "tamano": 315
+  },
+  {
+   "id": "cyberpunk",
+   "nombre": "Cyberpunk",
+   "autor": "Aurora",
+   "version": "1.0",
+   "descripcion": "Amarillo neón sobre negro, partículas y sonidos sintetizados.",
+   "colores": {
+    "fondo": "#0b0b10",
+    "texto": "#f5f3e8",
+    "acento1": "#fcee0a",
+    "acento2": "#00e5ff"
+   },
+   "animacion": "particulas",
+   "sonidos": {
+    "paquete": "neon"
+   },
+   "archivo": "cyberpunk.aurora-tema",
+   "miniatura": "cyberpunk.png",
+   "sha256": "6d2096df79f72634d49a3d23d784218bbc64739adb81ad620a4c088a9ee1c6f2",
+   "tamano": 328
+  },
+  {
+   "id": "oceano-profundo",
+   "nombre": "Océano profundo",
+   "autor": "Aurora",
+   "version": "1.0",
+   "descripcion": "Azules abisales con una imagen de fondo de luz entre las olas.",
+   "colores": {
+    "fondo": "#04121c",
+    "texto": "#dff3ff",
+    "acento1": "#0ea5e9",
+    "acento2": "#2dd4bf"
+   },
+   "animacion": "manchas",
+   "fondo": {
+    "tipo": "imagen",
+    "archivo": "fondo.jpg",
+    "oscurecer": 0.3
+   },
+   "archivo": "oceano-profundo.aurora-tema",
+   "miniatura": "oceano-profundo.png",
+   "sha256": "bc98fd2c363406513205f0039e0d7d05eb871917008eeceb4f8d135776087c21",
+   "tamano": 59922
+  }
+ ]
+}

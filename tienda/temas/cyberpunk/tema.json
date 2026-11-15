@@ -1,0 +1,4 @@
+{"id": "cyberpunk", "nombre": "Cyberpunk", "autor": "Aurora", "version": "1.0",
+ "descripcion": "Amarillo neón sobre negro, partículas y sonidos sintetizados.",
+ "colores": {"fondo": "#0b0b10", "texto": "#f5f3e8", "acento1": "#fcee0a", "acento2": "#00e5ff"},
+ "animacion": "particulas", "sonidos": {"paquete": "neon"}}

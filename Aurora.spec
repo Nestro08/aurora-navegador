@@ -7,9 +7,9 @@ a = Analysis(
     pathex=[],
     binaries=[],
     datas=[("recursos/aurora.png", "recursos")],
-    hiddenimports=["PyQt6.QtWebEngineCore", "PyQt6.QtWebEngineWidgets", "PyQt6.QtNetwork",
+    hiddenimports=["PyQt6.QtWebEngineCore", "PyQt6.QtWebEngineWidgets", "PyQt6.QtNetwork", "PyQt6.QtMultimedia",
                    "cryptography.fernet", "importlib.util"],
-    excludes=["tkinter", "PyQt6.QtQuick3D", "PyQt6.QtBluetooth", "PyQt6.QtMultimedia"],
+    excludes=["tkinter", "PyQt6.QtQuick3D", "PyQt6.QtBluetooth"],
     noarchive=False,
 )
 pyz = PYZ(a.pure)

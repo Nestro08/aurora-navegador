@@ -16,6 +16,8 @@ from .multimedia import MixinMultimedia
 from .descargas import MixinDescargas
 from .herramientas_dev import MixinDev
 from .asistente import PanelAsistente
+from . import temas
+from .temas import Apariencia, sonidos
 
 
 # ═════════════════════════════ ventana
@@ -78,11 +80,14 @@ class Ventana(QMainWindow, MixinOrganizacion, MixinMultimedia, MixinDescargas, M
             self.p.sync.terminado.connect(self._sync_terminada)
 
         # en Linux las pestañas hacen de barra de título (en Windows se oscurece la del sistema)
-        self.integrada = sys.platform != "win32" and not self.ajustes.datos.get("barra_sistema")
+        self.integrada = sys.platform != "win32"
         if self.integrada:
             self.setWindowFlag(Qt.WindowType.FramelessWindowHint, True)
             self.setMouseTracking(True)
         self.generar_nueva()
+        self._regenerar = QTimer(self, singleShot=True, interval=1500)
+        self._regenerar.timeout.connect(self.generar_nueva)
+        favicons().listo.connect(self._favicon_nuevo)
         self.iniciar_descargas()
         self.iniciar_multimedia()
         self.iniciar_dev()
@@ -159,7 +164,8 @@ class Ventana(QMainWindow, MixinOrganizacion, MixinMultimedia, MixinDescargas, M
         if self.incognito:
             self.tira.fondo = C_INCOG
             self.cabecera.setStyleSheet(f"#cabecera, #barra {{ background: {C_INCOG}; }}")
-        self.tira.activar_pedido.connect(self.activar)
+        self.tira.activar_pedido.connect(lambda c: (sonidos().tocar("cambiar") if c is not self.chip_activo else None,
+                                                    self.activar(c)))
         self.tira.cerrar_pedido.connect(self.cerrar)
         self.tira.nueva_pedida.connect(lambda: self.nueva_pestana())
         vc.addWidget(self.tira)
@@ -359,7 +365,7 @@ class Ventana(QMainWindow, MixinOrganizacion, MixinMultimedia, MixinDescargas, M
         m.addAction("Asistente IA\tCtrl+Shift+A", lambda: self.panel_ia.alternar())
         m.addAction("Extensiones", lambda: self.abrir_ajustes(Ajustes.indice("Extensiones")))
         m.addSeparator()
-        m.addAction("Contraseñas", lambda: self.abrir_ajustes(3))
+        m.addAction("Contraseñas", lambda: self.abrir_ajustes(Ajustes.indice("Contraseñas")))
         m.addAction("Ajustes\tCtrl+,", lambda: self.abrir_ajustes())
         m.adjustSize()
         m.exec(self.b_menu.mapToGlobal(QPoint(self.b_menu.width() - m.width(), self.b_menu.height() + 6)))
@@ -490,6 +496,8 @@ class Ventana(QMainWindow, MixinOrganizacion, MixinMultimedia, MixinDescargas, M
 
     def nueva_pestana(self, url="", enfocar=True):
         """url="" → página de inicio; url=None → en blanco (la rellena la web que la abrió)."""
+        if self.isVisible():  # no suena al restaurar la sesión
+            sonidos().tocar("abrir")
         pagina = PaginaWeb(self, self.perfil)
         pagina.zoom = float(self.ajustes.datos.get("zoom", 1.0))
         pagina.vista.setZoomFactor(pagina.zoom)
@@ -504,7 +512,7 @@ class Ventana(QMainWindow, MixinOrganizacion, MixinMultimedia, MixinDescargas, M
 
         v, p = pagina.vista, pagina.vista.page()
         v.titleChanged.connect(lambda _, c=chip: self._titulo(c))
-        v.iconChanged.connect(lambda i, c=chip: (setattr(c, "icono", i), c.update()))
+        v.iconChanged.connect(lambda i, c=chip: (setattr(c, "icono", i), c.update(), self._guardar_favicon(c, i)))
         v.urlChanged.connect(lambda _, c=chip: self._url(c))
         v.loadStarted.connect(lambda c=chip: self._carga(c, 5))
         v.loadProgress.connect(lambda n, c=chip: self._carga(c, n) if c.cargando else None)
@@ -558,6 +566,7 @@ class Ventana(QMainWindow, MixinOrganizacion, MixinMultimedia, MixinDescargas, M
         if len(self.tira.chips) == 1:
             self.close()
             return
+        sonidos().tocar("cerrar")
         url = chip.pagina.vista.url()
         if not self.es_nueva(url) and not url.isEmpty():
             self.cerradas.append(url.toString())
@@ -753,9 +762,37 @@ class Ventana(QMainWindow, MixinOrganizacion, MixinMultimedia, MixinDescargas, M
                     break
         return res
 
-    def sugerencias(self):
-        urls = [m["url"] for m in self.marcadores.datos] + [h["url"] for h in self.historial.datos[:800]]
-        return list(dict.fromkeys(urls))
+    def sugerencias(self, q):
+        """Lo que aparece bajo la barra de direcciones mientras escribes."""
+        palabras = q.lower().split()
+        if not palabras:
+            return []
+
+        def vale(*t):
+            s = " ".join(t).lower()
+            return all(p in s for p in palabras)
+
+        url, busqueda = self.interpretar(q)
+        res = [{"tipo": "buscar", "titulo": q.strip(), "url": url.toString(), "motor": self.ajustes.datos["buscador"]}
+               if busqueda else {"tipo": "ir", "titulo": url.toString().split("://", 1)[-1], "url": url.toString()}]
+        vistos = set()
+        for c in self.tira.chips:
+            u = c.pagina.vista.url().toString()
+            if c is not self.chip_activo and not self.es_nueva(QUrl(u)) and vale(c.titulo, u) and len(vistos) < 2:
+                vistos.add(u)
+                res.append({"tipo": "pestana", "titulo": c.titulo, "url": u, "accion": lambda c=c: self.activar(c)})
+        for m in self.marcadores.datos:
+            if m["url"] not in vistos and vale(m["titulo"], m["url"]) and len(res) < 5:
+                vistos.add(m["url"])
+                res.append({"tipo": "acceso", "titulo": m["titulo"], "url": m["url"]})
+        puntos = {}
+        for n, h in enumerate(self.historial.datos[:3000]):  # visitas y lo reciente que es
+            if h["url"] not in vistos and vale(h.get("titulo", ""), h["url"]):
+                titulo, valor = puntos.get(h["url"], (h.get("titulo", ""), 0))
+                puntos[h["url"]] = (titulo or h.get("titulo", ""), valor + 1 + 2 / (1 + n / 50))
+        for u, (titulo, _) in sorted(puntos.items(), key=lambda x: -x[1][1])[:8 - len(res)]:
+            res.append({"tipo": "historial", "titulo": titulo, "url": u})
+        return res
 
     def registrar_historial(self, vista):
         url = vista.url().toString()
@@ -794,23 +831,64 @@ class Ventana(QMainWindow, MixinOrganizacion, MixinMultimedia, MixinDescargas, M
             ventana.generar_nueva()
         self._estrella()
 
+    MAX_ACCESOS = 30
+
+    def _accesos(self):
+        """Los accesos de la página de inicio (los predeterminados si aún no tienes ninguno)."""
+        return self.marcadores.datos[:self.MAX_ACCESOS] or [{"titulo": t, "url": u} for t, u in ACCESOS_DEFECTO]
+
     def generar_nueva(self):
         a = self.ajustes.datos
-        lista = [(m["titulo"], m["url"]) for m in self.marcadores.datos[:16]] or ACCESOS_DEFECTO
-        if not a["mostrar_accesos"]:
-            lista = []
+        lista = self._accesos() if a["mostrar_accesos"] else []
         piezas = []
-        for i, (titulo, url) in enumerate(lista):
-            tono = sum(map(ord, titulo)) * 37 % 360
-            letra = html.escape((titulo.strip() or "?")[0].upper())
+        for i, m in enumerate(lista):
+            titulo, url = m.get("titulo") or m["url"], m["url"]
+            host = Favicons.host(url)
+            icono_web = favicons().ruta(host) if host else None
+            if m.get("icono"):
+                clase, contenido = "esfera", html.escape(m["icono"])
+            elif icono_web and icono_web.exists() and not m.get("color"):
+                clase = "esfera blanca"
+                contenido = f'<img src="{html.escape(QUrl.fromLocalFile(str(icono_web)).toString(), True)}" alt="">'
+            else:
+                clase, contenido = "esfera", html.escape((nombre_sitio(host) if host else titulo)[:1].upper() or "?")
+            if m.get("color"):
+                c = QColor(m["color"])
+                fondo = (f"radial-gradient(circle at 32% 25%,{c.lighter(150).name()},{c.name()} 55%,"
+                         f"{c.darker(160).name()})")
+                brillo = f"rgba({rgb(m['color'])},.55)"
+            else:
+                tono = tono_de(nombre_sitio(host) if host else titulo)
+                fondo = (f"radial-gradient(circle at 32% 25%,hsl({tono},85%,72%),hsl({tono},72%,52%) 55%,"
+                         f"hsl({(tono + 30) % 360},70%,32%))")
+                brillo = f"hsla({tono},80%,60%,.55)"
+            estilo = "" if "blanca" in clase else f' style="background:{fondo}"'
             piezas.append(
-                f'<a class="acc e" style="animation-delay:{0.22 + i * 0.035:.3f}s" href="{html.escape(url, True)}">'
-                f'<b style="background:linear-gradient(135deg,hsl({tono},75%,58%),hsl({(tono + 45) % 360},70%,45%))">'
-                f'{letra}</b><span>{html.escape(titulo)}</span></a>')
-        extra = "" if a["fondo_animado"] else ".fondo i{animation:none}"
-        contenido = (PLANTILLA_NUEVA.replace("%%ACCESOS%%", "".join(piezas))
+                f'<a class="acc e" draggable="true" data-i="{i}" href="{html.escape(url, True)}" '
+                f'style="animation-delay:{0.22 + i * 0.03:.3f}s;--brillo:{brillo}">'
+                f'<div class="{clase}"{estilo}>{contenido}</div><span>{html.escape(titulo)}</span>'
+                f'<button class="ed e1" data-ed="{i}" title="Editar">✎</button>'
+                f'<button class="ed e2" data-del="{i}" title="Quitar">✕</button></a>')
+        if a["mostrar_accesos"] and not self.incognito:
+            piezas.append(f'<a class="acc e nuevo" href="#" style="animation-delay:{0.22 + len(lista) * 0.03:.3f}s">'
+                          '<div class="esfera">+</div><span>Añadir</span></a>')
+        datos = [{"titulo": m.get("titulo", ""), "url": m["url"], "color": m.get("color", ""), "icono": m.get("icono", "")}
+                 for m in lista]
+        tema = Apariencia.tema or temas.buscar("aurora")
+        if self.incognito:  # en incógnito, siempre las manchas moradas
+            tema = dict(tema, fondo=None, animacion="manchas")
+        fondo, extra = temas.fondo_pagina_inicio(tema, a["fondo_animado"])
+        def js(valor):  # JSON seguro dentro de <script>
+            return json.dumps(valor, ensure_ascii=False).replace("<", "\\u003c")
+
+        contenido = (PLANTILLA_NUEVA.replace("%%ACCESOS%%", "".join(piezas)).replace("%%FONDO%%", fondo)
+                     .replace("%%ACC_JSON%%", js(datos)).replace("%%MSG_NT%%", js(MSG_NT))
+                     .replace("%%PANEL%%", C["superficie"])
+                     .replace("%%FONDO_C%%", C["fondo"]).replace("%%FONDO_RGB%%", rgb(C["fondo"]))
+                     .replace("%%TEXTO_RGB%%", rgb(C["texto"])).replace("%%TEXTO%%", C["texto"])
+                     .replace("%%TENUE%%", C["tenue"])
                      .replace("%%BUSCADOR%%", json.dumps(BUSCADORES[a["buscador"]]))
-                     .replace("%%NOMBRE%%", json.dumps(a.get("nombre", "")))
+                     .replace("%%NOMBRE%%", js(a.get("nombre", "")))
                      .replace("%%CSS_EXTRA%%", extra).replace("%%A_RGB%%", rgb(T.a1))
                      .replace("%%A%%", T.a1).replace("%%B%%", T.a2))
         if self.incognito:
@@ -827,15 +905,69 @@ class Ventana(QMainWindow, MixinOrganizacion, MixinMultimedia, MixinDescargas, M
         from .importar import DialogoImportar
         DialogoImportar(self).exec()
 
+    def accion_inicio(self, d):
+        """Añadir, editar, quitar o mover una esfera desde la página de inicio."""
+        m = self.marcadores.datos
+        ahora = datetime.now().timestamp()
+        if not m:  # editar los predeterminados los convierte en tuyos
+            m.extend({"url": u, "titulo": t, "ts": ahora} for t, u in ACCESOS_DEFECTO)
+        accion, i = d.get("a"), int(d.get("i", -1))
+        if accion == "guardar":
+            url = QUrl.fromUserInput(str(d.get("url", "")))
+            if url.scheme() not in ("http", "https") or not url.host():
+                self.aviso.mostrar("Esa dirección no es válida")
+                return
+            entrada = {"url": url.toString(), "titulo": str(d.get("titulo") or "").strip()[:60]
+                       or nombre_sitio(url.host()).capitalize(), "ts": ahora}
+            if re.fullmatch(r"#[0-9a-fA-F]{6}", str(d.get("color", ""))):
+                entrada["color"] = d["color"].lower()
+            if str(d.get("icono", "")).strip():
+                entrada["icono"] = str(d["icono"]).strip()[:4]
+            if 0 <= i < len(m):
+                if m[i]["url"] != entrada["url"]:
+                    self.p.marcar_borrado_marcador(m[i]["url"])
+                m[i] = entrada
+            else:
+                existente = next((n for n, x in enumerate(m) if x["url"] == entrada["url"]), None)
+                if existente is None:
+                    m.append(entrada)
+                else:
+                    m[existente] = entrada
+            self.aviso.mostrar(f"★  «{entrada['titulo']}» en tu página de inicio")
+        elif accion == "borrar" and 0 <= i < len(m):
+            self.p.marcar_borrado_marcador(m[i]["url"])
+            del m[i]
+        elif accion == "mover":
+            de, hacia = int(d.get("de", -1)), int(d.get("hacia", -1))
+            if 0 <= de < len(m) and 0 <= hacia < len(m):
+                m.insert(hacia, m.pop(de))
+        else:
+            return
+        self.marcadores.guardar()
+        for ventana in self.p.ventanas:
+            ventana.generar_nueva()
+            ventana.recargar_nuevas()
+            ventana._estrella()
+
     def set_buscador(self, nombre):
         self.ajustes.datos["buscador"] = nombre
         self.ajustes.guardar()
         self.generar_nueva()
         self.aviso.mostrar(f"Buscador: {nombre}")
 
+    def _favicon_nuevo(self, host):
+        if any(Favicons.host(m["url"]) == host for m in self._accesos()):
+            self._regenerar.start()
+
+    def _guardar_favicon(self, chip, icono):
+        url = chip.pagina.vista.url()
+        if not self.incognito and url.scheme() in ("http", "https"):
+            favicons().guardar(url.toString(), icono)
+
     def borrar_historial(self):
         self.historial.datos.clear()
         self.historial.guardar()
+        favicons().borrar_todo()
         self.aviso.mostrar("🧹  Historial borrado")
 
     def borrar_cookies(self):
@@ -851,6 +983,13 @@ class Ventana(QMainWindow, MixinOrganizacion, MixinMultimedia, MixinDescargas, M
     def consola_pagina(self, pagina, nivel, mensaje, linea, origen):
         if mensaje.startswith(MSG_PW):
             self.contrasena_detectada(pagina, mensaje[len(MSG_PW):])
+            return
+        if mensaje.startswith(MSG_NT):
+            if self.es_nueva(pagina.url()) and not self.incognito:  # solo de la página de inicio de Aurora
+                try:
+                    self.accion_inicio(json.loads(mensaje[len(MSG_NT):]))
+                except (ValueError, TypeError, KeyError):
+                    pass
             return
         if mensaje == MSG_GEN:
             self.sugerir_contrasena(pagina)
@@ -918,9 +1057,18 @@ class Ventana(QMainWindow, MixinOrganizacion, MixinMultimedia, MixinDescargas, M
                 c.pagina.vista.reload()
 
     def aplicar_acento(self, nombre):
-        fijar_acento(nombre)
-        self.set_ajuste("acento", nombre)
-        QApplication.instance().setStyleSheet(hoja_estilo())
+        """nombre = uno de ACENTOS, o "" para usar el del tema."""
+        Apariencia.guardar(acento=nombre)
+        self.aplicar_tema(Apariencia.tema)
+
+    def aplicar_tema(self, tema, guardar=True):
+        """Cambia el tema en caliente en todas las ventanas."""
+        if guardar:
+            Apariencia.guardar(tema=tema["id"])
+        temas.aplicar_colores(tema, Apariencia.datos()["acento"])
+        app = QApplication.instance()
+        app.setPalette(temas.paleta_qt())
+        app.setStyleSheet(hoja_estilo())
         for w in QApplication.allWidgets():
             w.update()
         for ventana in gestor().todas_las_ventanas():
@@ -1063,7 +1211,7 @@ class Ventana(QMainWindow, MixinOrganizacion, MixinMultimedia, MixinDescargas, M
             m.addAction(f"Rellenar como  {c['usuario'] or '(sin usuario)'}",
                         lambda c=c: self.rellenar_pedido(c))
         m.addSeparator()
-        m.addAction("Gestionar contraseñas…", lambda: self.abrir_ajustes(3))
+        m.addAction("Gestionar contraseñas…", lambda: self.abrir_ajustes(Ajustes.indice("Contraseñas")))
         b = self.omni.llave
         m.exec(b.mapToGlobal(QPoint(0, b.height() + 6)))
 

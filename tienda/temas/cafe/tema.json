@@ -1,0 +1,4 @@
+{"id": "cafe", "nombre": "Café", "autor": "Aurora", "version": "1.0",
+ "descripcion": "Claro y cálido, con tonos de café con leche.",
+ "colores": {"fondo": "#f3ece3", "texto": "#2e221a", "acento1": "#b4632b", "acento2": "#d9a05b"},
+ "animacion": "aurora", "sonidos": {"paquete": "suave"}}
