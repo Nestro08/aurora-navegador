@@ -6,6 +6,7 @@ from . import temas
 from .temas import Apariencia, aplicar_colores, paleta_qt
 from .arranque import PantallaArranque
 from . import drm
+from .actualizar import actualizador, ofrecer
 
 SERVIDOR = f"aurora-{getpass.getuser()}"
 
@@ -70,6 +71,12 @@ def _escuchar(app):
     return servidor
 
 
+def _ofrecer_version(release):
+    v = gestor().ventana_activa()
+    if v:
+        ofrecer(v, release)
+
+
 def _actualizar_listas():
     if listas().toca_actualizar() and any(p.ajustes.datos.get("bloqueo_ampliado", True)
                                           for p in gestor().perfiles.values()):
@@ -114,6 +121,10 @@ def main():
     app.setStyleSheet(hoja_estilo())
     servidor = _escuchar(app)  # noqa: F841  (se mantiene vivo mientras dure la app)
     QTimer.singleShot(20000, _actualizar_listas)  # lista de bloqueo: con Aurora ya abierto, sin estorbar
+    act = actualizador()  # versiones nuevas en GitHub Releases (como mucho una consulta al día)
+    act.disponible.connect(_ofrecer_version)
+    act.reloj.start()
+    QTimer.singleShot(30000, act.buscar)
     app.aboutToQuit.connect(Almacen.volcar_pendientes)
     if Apariencia.datos().get("arranque", True):
         nombre = perfil.ajustes.datos.get("nombre", "")

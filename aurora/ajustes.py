@@ -1528,6 +1528,30 @@ class Ajustes(QWidget):
         cab.addSpacing(14)
         cab.addLayout(textos, 1)
         l.addLayout(cab)
+
+        self._sub(l, "Actualizaciones")
+        from .actualizar import actualizador, como_se_instala
+        t = Tarjeta()
+        como = {"windows": "Aurora se descarga e instala sola con un clic.",
+                "linux": "Aurora se descarga e instala sola con un clic.",
+                None: "Lo estás usando desde el código: te avisa, y se actualiza con «git pull»."}[como_se_instala()]
+        t.fila("Avisarme de versiones nuevas", f"Lo mira en GitHub una vez al día. {como}",
+               interruptor(Apariencia.datos().get("buscar_actualizaciones", True),
+                           lambda c: Apariencia.guardar(buscar_actualizaciones=c)))
+        estado = t.fila("Buscar ahora", f"Tienes la versión {__version__}.")
+
+        def buscar_ahora():
+            estado.desc.setText("Buscando…")
+
+            def hecho(_resultado, mensaje):
+                try:
+                    estado.desc.setText(mensaje)
+                except RuntimeError:  # se cerró la pantalla mientras tanto
+                    pass
+            actualizador().buscar(manual=True, al_terminar=hecho)
+
+        estado.layout().addWidget(botones(("Buscar actualizaciones", buscar_ahora)))
+        l.addWidget(t)
         self._sub(l, "Atajos de teclado")
         t = Tarjeta()
         rejilla = QWidget()

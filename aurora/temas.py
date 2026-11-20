@@ -289,7 +289,8 @@ class Apariencia:
         if cls.almacen is None:
             cls.almacen = Almacen("apariencia", {})
             for k, v in {"tema": "aurora", "acento": "", "sonidos": True, "volumen": 0.6, "tienda_url": "",
-                         "arranque": True}.items():
+                         "arranque": True, "buscar_actualizaciones": True, "omitida": "",
+                         "ultima_busqueda": 0}.items():
                 cls.almacen.datos.setdefault(k, v)
         return cls.almacen.datos
 

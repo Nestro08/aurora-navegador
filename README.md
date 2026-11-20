@@ -6,10 +6,23 @@ Navegador de escritorio con motor Chromium (QtWebEngine), escrito en Python y Py
 herramientas para desarrolladores, un gestor de contraseñas, perfiles, sincronización, extensiones y un
 asistente con IA.
 
+## Descargar
+
+Todas las versiones están en **[Releases](https://github.com/Nestro08/aurora-navegador/releases/latest)**:
+
+| Sistema | Qué descargar |
+|---|---|
+| **Windows** | `Aurora-Setup-x.y.exe` (instalador) o `Aurora-x.y-Windows-portable.zip` (sin instalar) |
+| **Linux (Fedora)** | `Aurora-x.y-Linux.zip` (mira abajo cómo instalarlo) |
+
+**Actualizaciones:** Aurora mira una vez al día si hay una versión nueva y te avisa. Con un clic en
+«Actualizar» se descarga, comprueba que el archivo es el publicado (SHA-256) y se instala solo. Se puede
+desactivar en *Ajustes → Acerca de*.
+
 ## Instalar en Fedora (Linux)
 
 ```bash
-unzip Aurora-4.0.zip && cd Aurora
+unzip Aurora-x.y-Linux.zip && cd Aurora
 bash instalar-fedora.sh
 ```
 
@@ -22,7 +35,7 @@ los vídeos MP4 de webs como Nike, Instagram o Twitter. El PyQt6 de pip no los t
 - Se abre desde la terminal con `aurora`.
 - Al final te pregunta si quieres que sea tu navegador predeterminado. Para volver a Firefox:
   `xdg-settings set default-web-browser org.mozilla.firefox.desktop`.
-- Para actualizar, vuelve a ejecutar `instalar-fedora.sh` con la versión nueva.
+- Las versiones nuevas se instalan desde el aviso de Aurora (o volviendo a ejecutar `instalar-fedora.sh`).
 - Las pestañas hacen de barra de título (arrastra la zona vacía para mover la ventana, doble clic para
   maximizar).
 - Para desinstalar: `bash desinstalar-fedora.sh`.
@@ -46,9 +59,18 @@ python Aurora.pyw
 **Como programa de verdad (.exe + instalador):** doble clic en `construir.bat`.
 
 1. Crea `dist\Aurora\Aurora.exe` con PyInstaller.
-2. Si tienes [Inno Setup 6](https://jrsoftware.org/isdl.php), crea también `dist\Aurora-Setup-4.0.exe`. El
+2. Si tienes [Inno Setup 6](https://jrsoftware.org/isdl.php), crea también `dist\Aurora-Setup-x.y.exe`. El
    instalador añade accesos directos y registra Aurora como navegador. Después puedes elegirlo como
    predeterminado en *Configuración de Windows → Aplicaciones predeterminadas*.
+3. Deja en `dist` todo lo de una Release: la versión portátil, el paquete de Linux y `SHA256SUMS.txt`.
+
+## Publicar una versión nueva
+
+1. Cambia la versión en todos los archivos: `python herramientas/version.py 4.1`.
+2. En Windows, doble clic en `construir.bat`.
+3. En GitHub: **Releases → Draft a new release**. Etiqueta `v4.1`, título `Aurora 4.1`, el texto de
+   `dist\NOTAS-4.1.md`, y sube los archivos que indica `construir.bat` (también `SHA256SUMS.txt`).
+   Los nombres no se cambian: Aurora los busca así para actualizarse.
 
 Aurora es de **instancia única**: si ya está abierto y pulsas un enlace en otra aplicación, se abre como una
 pestaña nueva en la ventana que tienes. Acepta URLs y archivos como argumentos (`Aurora.exe pagina.html`) y
@@ -132,8 +154,9 @@ aurora/
   temas.py · tienda_temas.py   temas, sonidos, tienda en línea y editor
   arranque.py           pantalla de bienvenida
   drm.py                Widevine (Netflix, Spotify…) de un navegador instalado
+  actualizar.py         aviso de versiones nuevas (GitHub Releases) y actualización con un clic
   importar.py           importar desde Chrome, Brave, Edge…
-herramientas/           icono, versión del .exe y publicar_tienda.py
+herramientas/           icono, versión (version.py), preparar_release.py y publicar_tienda.py
 tienda/                 temas de la tienda en línea (ver tienda/README.md)
 instalador/aurora.iss   instalador de Inno Setup
 tests/                  pruebas (pytest)

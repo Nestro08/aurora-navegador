@@ -1,9 +1,12 @@
-; Instalador de Aurora para Windows (Inno Setup 6: https://jrsoftware.org/isinfo.php)
+﻿; Instalador de Aurora para Windows (Inno Setup 6: https://jrsoftware.org/isinfo.php)
 ; Compílalo con construir.bat, o abriendo este archivo en Inno Setup y pulsando "Compile".
 ; Registra Aurora como navegador para que aparezca en Configuración > Aplicaciones predeterminadas.
 
 #define Nombre "Aurora"
-#define Version "4.0"
+; La versión la pone herramientas/version.py (o el flujo de GitHub con /DVersion=x.y)
+#ifndef Version
+  #define Version "4.0"
+#endif
 #define Exe "Aurora.exe"
 
 [Setup]
@@ -36,6 +39,10 @@ Name: "spanish"; MessagesFile: "compiler:Languages\Spanish.isl"
 
 [Tasks]
 Name: "escritorio"; Description: "Crear un acceso directo en el escritorio"; GroupDescription: "Accesos directos:"
+
+[InstallDelete]
+; al actualizar, fuera las librerías de la versión anterior (PyInstaller las deja en _internal)
+Type: filesandordirs; Name: "{app}\_internal"
 
 [Files]
 Source: "..\dist\Aurora\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
@@ -70,6 +77,8 @@ Root: HKA; Subkey: "Software\RegisteredApplications"; ValueType: string; ValueNa
 
 [Run]
 Filename: "{app}\{#Exe}"; Description: "Abrir {#Nombre}"; Flags: nowait postinstall skipifsilent
+; actualización desde Aurora (instalación silenciosa): se vuelve a abrir solo
+Filename: "{app}\{#Exe}"; Flags: nowait; Check: WizardSilent
 Filename: "ms-settings:defaultapps"; Description: "Elegir Aurora como navegador predeterminado"; Flags: shellexec postinstall skipifsilent unchecked
 
 [UninstallDelete]

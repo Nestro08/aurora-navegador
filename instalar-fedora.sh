@@ -1,7 +1,12 @@
 #!/usr/bin/env bash
 # Instala Aurora para tu usuario en Fedora (y otras distros con GNOME/KDE).
 # Uso:  bash instalar-fedora.sh       (vuelve a ejecutarlo para actualizar)
+#       bash instalar-fedora.sh --sin-preguntas   (lo usa Aurora al actualizarse: no pregunta nada ni usa sudo;
+#                                                  si falta algún paquete del sistema, termina con código 3)
 set -euo pipefail
+
+SIN_PREGUNTAS=0
+[ "${1:-}" = "--sin-preguntas" ] && SIN_PREGUNTAS=1
 
 ORIGEN="$(cd "$(dirname "$0")" && pwd)"
 DESTINO="$HOME/.local/share/aurora-app"
@@ -25,13 +30,17 @@ if command -v dnf >/dev/null && command -v rpm >/dev/null; then
                    python3-secretstorage xcb-util-cursor libxkbcommon-x11 nss libnotify; do
         rpm -q "$paquete" >/dev/null 2>&1 || faltan+=("$paquete")
     done
+    if [ ${#faltan[@]} -gt 0 ] && [ "$SIN_PREGUNTAS" = 1 ]; then
+        echo "Faltan paquetes del sistema: ${faltan[*]}. Ejecuta en una terminal: bash instalar-fedora.sh"
+        exit 3
+    fi
     if [ ${#faltan[@]} -gt 0 ]; then
         echo "Instalando paquetes de Fedora: ${faltan[*]} (te pedirá tu contraseña)"
         sudo dnf install -y "${faltan[@]}"
     fi
 
     # El decodificador H.264 no está en el ffmpeg de Fedora (patentes): lo da RPM Fusion
-    if ! rpm -q libavcodec-freeworld >/dev/null 2>&1 && ! rpm -q ffmpeg-libs >/dev/null 2>&1; then
+    if [ "$SIN_PREGUNTAS" = 0 ] && ! rpm -q libavcodec-freeworld >/dev/null 2>&1 && ! rpm -q ffmpeg-libs >/dev/null 2>&1; then
         echo
         echo "Para ver vídeos H.264 (MP4) hace falta «libavcodec-freeworld» del repositorio RPM Fusion."
         read -r -p "¿Instalarlo (y activar RPM Fusion free si no lo está)? [S/n] " respuesta
@@ -109,6 +118,7 @@ gtk-update-icon-cache -f -t "$ICONOS" 2>/dev/null || true
 
 echo
 echo "  ✓ Aurora instalado. Búscalo en Actividades (tecla Super) o ejecuta:  aurora"
+[ "$SIN_PREGUNTAS" = 1 ] && exit 0
 echo
 read -r -p "¿Quieres que Aurora sea tu navegador predeterminado? [s/N] " respuesta
 if [[ "$respuesta" =~ ^[sS]$ ]]; then
