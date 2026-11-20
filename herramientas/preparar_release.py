@@ -44,9 +44,9 @@ def main():
         print(f"⚠ No está {instalador.name}: créalo en Windows con construir.bat (necesita Inno Setup 6).")
 
     if (DIST / "Aurora" / "Aurora.exe").exists():
-        portable = DIST / f"Aurora-{version}-Windows-portable"
-        shutil.make_archive(str(portable), "zip", DIST, "Aurora")
-        subirlos.append(portable.with_suffix(".zip"))
+        # ojo: no usar with_suffix(), que tomaría «.0-Windows-portable» de «Aurora-4.0-…» como extensión
+        portable = shutil.make_archive(str(DIST / f"Aurora-{version}-Windows-portable"), "zip", DIST, "Aurora")
+        subirlos.append(Path(portable))
 
     r = subprocess.run([sys.executable, str(RAIZ / "herramientas" / "empaquetar_linux.py")],
                        capture_output=True, text=True, check=True)
