@@ -27,6 +27,7 @@ echo  Programa listo: dist\Aurora\Aurora.exe
 echo.
 set "ISCC=%ProgramFiles(x86)%\Inno Setup 6\ISCC.exe"
 if not exist "%ISCC%" set "ISCC=%ProgramFiles%\Inno Setup 6\ISCC.exe"
+if not exist "%ISCC%" set "ISCC=%LOCALAPPDATA%\Programs\Inno Setup 6\ISCC.exe"
 if exist "%ISCC%" (
     "%ISCC%" instalador\aurora.iss || goto error
     echo.
