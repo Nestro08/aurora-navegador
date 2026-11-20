@@ -2,7 +2,10 @@
 from .seguridad import *  # noqa: F401,F403
 from .sincronizacion import *  # noqa: F401,F403
 from .extensiones import *  # noqa: F401,F403
+from PyQt6.QtNetwork import QNetworkCookie
+
 from .motor import Bloqueador
+from .permisos import presentar_notificacion
 
 COLORES_PERFIL = ["#7c5cff", "#22c55e", "#f97316", "#ec4899", "#06b6d4", "#f59e0b", "#ef4444", "#14b8a6"]
 
@@ -20,6 +23,7 @@ class Perfil(QObject):
             self.ajustes, self.marcadores, self.claves = base.ajustes, base.marcadores, base.claves
             self.historial, self.lista_descargas = AlmacenMemoria([]), AlmacenMemoria([])
             self.verificador, self.sync = base.verificador, None
+            self.permisos = AlmacenMemoria({})  # lo que permitas en incógnito se olvida al cerrarlo
             self.web = QWebEngineProfile(QApplication.instance())  # sin nombre: no se guarda nada en disco
         else:
             self.ajustes = Almacen("ajustes", dict(AJUSTES_DEFECTO), self.carpeta)
@@ -27,8 +31,12 @@ class Perfil(QObject):
                 self.ajustes.datos.setdefault(clave, valor)
             self.marcadores = Almacen("marcadores", [], self.carpeta)
             self.historial = Almacen("historial", [], self.carpeta)
+            # entradas sueltas que no tengan la forma esperada no deben romper la interfaz
+            self.marcadores.datos[:] = [m for m in self.marcadores.datos if es_marcador(m)]
+            self.historial.datos[:] = [h for h in self.historial.datos if es_visita(h)]
             self.claves = Contrasenas(self.carpeta)
             self.lista_descargas = Almacen("descargas", [], self.carpeta)
+            self.permisos = Almacen("permisos", {}, self.carpeta)  # {origen: {tipo: permitido}}
             self.verificador = Verificador(self.ajustes)
             nombre_web = NOMBRE if self.carpeta == DATOS else f"{NOMBRE}-{self.carpeta.name}"
             self.web = QWebEngineProfile(nombre_web, QApplication.instance())
@@ -55,6 +63,7 @@ class Perfil(QObject):
         s.setFontSize(QWebEngineSettings.FontSize.DefaultFontSize, TAMANOS.get(a["tam_fuente"], 16))
         self.bloqueador = Bloqueador(self._peticion)
         self.bloqueador.activo, self.bloqueador.dnt = a["bloqueo"], a["dnt"]
+        self.bloqueador.ampliado = a.get("bloqueo_ampliado", True)
         self.web.setUrlRequestInterceptor(self.bloqueador)
         self.web.cookieStore().setCookieFilter(
             lambda peticion: not (self.ajustes.datos.get("cookies_terceros") and peticion.thirdParty))
@@ -66,7 +75,38 @@ class Perfil(QObject):
         script.setRunsOnSubFrames(False)
         self.web.scripts().insert(script)
         self.web.downloadRequested.connect(self._descarga)
+        # registro de cookies para poder borrar las de un sitio (Qt no deja preguntar por ellas)
+        self.cookies = {}
+        tienda = self.web.cookieStore()
+        tienda.cookieAdded.connect(self._cookie_anadida)
+        tienda.cookieRemoved.connect(self._cookie_quitada)
+        tienda.loadAllCookies()
+        self.web.setNotificationPresenter(presentar_notificacion)
+        if hasattr(self.web, "setPersistentPermissionsPolicy"):  # incógnito: solo en memoria
+            P = QWebEngineProfile.PersistentPermissionsPolicy
+            self.web.setPersistentPermissionsPolicy(P.StoreInMemory if self.incognito else P.StoreOnDisk)
         extensiones().aplicar(self.web)
+
+    @staticmethod
+    def _clave_cookie(c):
+        return bytes(c.name()), c.domain().lower(), c.path()
+
+    def _cookie_anadida(self, c):
+        c = QNetworkCookie(c)  # la que llega es temporal
+        self.cookies[self._clave_cookie(c)] = c
+
+    def _cookie_quitada(self, c):
+        self.cookies.pop(self._clave_cookie(QNetworkCookie(c)), None)
+
+    def cookies_de(self, host):
+        """Cookies del sitio: las del propio host, las de sus subdominios y las de sus dominios padre."""
+        host = host.lower()
+        res = []
+        for c in self.cookies.values():
+            dominio = c.domain().lstrip(".").lower()
+            if dominio and (host == dominio or host.endswith("." + dominio) or dominio.endswith("." + host)):
+                res.append(c)
+        return res
 
     def _peticion(self, *datos):
         for v in self.ventanas:

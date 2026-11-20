@@ -131,6 +131,7 @@ class VistaIA(QWebEngineView):
         super().__init__()
         self.v = ventana
         self.setPage(QWebEnginePage(ventana.perfil, self))
+        ventana.conectar_permisos(self.page())  # p. ej. el micrófono para dictar a la IA
 
     def createWindow(self, tipo):  # ventanas de inicio de sesión (Google, Microsoft…) como pestaña
         return self.v.nueva_pestana(None)

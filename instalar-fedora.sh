@@ -22,7 +22,7 @@ if command -v dnf >/dev/null && command -v rpm >/dev/null; then
     SISTEMA=1
     faltan=()
     for paquete in python3-pyqt6 python3-pyqt6-webengine python3-cryptography python3-keyring \
-                   python3-secretstorage xcb-util-cursor libxkbcommon-x11 nss; do
+                   python3-secretstorage xcb-util-cursor libxkbcommon-x11 nss libnotify; do
         rpm -q "$paquete" >/dev/null 2>&1 || faltan+=("$paquete")
     done
     if [ ${#faltan[@]} -gt 0 ]; then
@@ -46,7 +46,7 @@ fi
 
 mkdir -p "$DESTINO" "$BIN" "$APPS" "$ICONOS/256x256/apps"
 rm -rf "$DESTINO/aurora"
-cp -r "$ORIGEN/aurora" "$ORIGEN/Aurora.pyw" "$ORIGEN/requirements.txt" "$ORIGEN/recursos" "$DESTINO/"
+cp -r "$ORIGEN/aurora" "$ORIGEN/Aurora.pyw" "$ORIGEN/requirements.txt" "$ORIGEN/recursos" "$ORIGEN/LICENSE" "$DESTINO/"
 find "$DESTINO" -name "__pycache__" -type d -prune -exec rm -rf {} +
 
 if [ "$SISTEMA" = 1 ]; then

@@ -2,6 +2,7 @@
 import os
 import stat
 import string
+import sys
 
 import pytest
 
@@ -68,6 +69,10 @@ def test_origen(url, origen):
     assert Contrasenas.origen(url) == origen
 
 
+SOLO_LINUX = pytest.mark.skipif(sys.platform == "win32", reason="en Windows se cifra con DPAPI, no con el llavero")
+
+
+@SOLO_LINUX
 def test_cifrado_con_llavero(con_llavero):
     assert cifrado_disponible() == "llavero"
     v = cifrar("secreto")
@@ -75,6 +80,7 @@ def test_cifrado_con_llavero(con_llavero):
     assert descifrar(v) == "secreto"
 
 
+@SOLO_LINUX
 def test_sin_llavero_se_marca_como_sin_cifrar(tmp_path, sin_llavero):
     assert cifrado_disponible() is None
     c = Contrasenas(tmp_path)
@@ -101,3 +107,41 @@ def test_leer_clave_distingue_fallo_de_vacia(tmp_path, con_llavero):
     assert c.leer_clave(c.datos["cuentas"][0]) == ""
     assert c.leer_clave(c.datos["cuentas"][1]) is None
     assert c.clave(c.datos["cuentas"][1]) == ""
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="DPAPI solo existe en Windows")
+def test_cifrado_dpapi_en_windows():
+    assert cifrado_disponible() == "dpapi"
+    v = cifrar("secreto")
+    assert v.startswith("dpapi:") and "secreto" not in v
+    assert descifrar(v) == "secreto"
+
+
+def test_json_danado_se_aparta_y_no_se_pisa(tmp_path):
+    (tmp_path / "marcadores.json").write_text('[{"url": "https://a.com"', encoding="utf-8")  # cortado
+    Almacen.recuperados.clear()
+    a = Almacen("marcadores", [], tmp_path)
+    assert a.datos == []
+    copias = list(tmp_path.glob("marcadores.danado-*.json"))
+    assert len(copias) == 1 and copias[0].read_text(encoding="utf-8").startswith('[{"url"')
+    assert Almacen.recuperados == copias
+    a.guardar()  # el siguiente guardado ya no destruye lo que había
+    assert copias[0].exists()
+    Almacen.recuperados.clear()
+
+
+def test_json_con_tipo_inesperado_se_aparta(tmp_path):
+    (tmp_path / "contrasenas.json").write_text("[1, 2, 3]", encoding="utf-8")
+    Almacen.recuperados.clear()
+    c = Contrasenas(tmp_path)
+    assert c.datos == {"cuentas": [], "nunca": []}
+    assert list(tmp_path.glob("contrasenas.danado-*.json"))
+    Almacen.recuperados.clear()
+
+
+def test_cuentas_mal_formadas_se_ignoran(tmp_path):
+    (tmp_path / "contrasenas.json").write_text(
+        '{"cuentas": [{"origen": "https://a.com", "usuario": "yo", "clave": "b64:eA=="}, {"origen": 3}, "x"]}',
+        encoding="utf-8")
+    c = Contrasenas(tmp_path)
+    assert [x["usuario"] for x in c.datos["cuentas"]] == ["yo"] and c.datos["nunca"] == []

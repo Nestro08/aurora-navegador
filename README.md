@@ -1,5 +1,7 @@
 # Aurora 4.0
 
+*Por NMM*
+
 Navegador de escritorio con motor Chromium (QtWebEngine), escrito en Python y PyQt6. Animado, oscuro y con
 herramientas para desarrolladores, un gestor de contraseñas, perfiles, sincronización, extensiones y un
 asistente con IA.
@@ -58,12 +60,13 @@ pestaña nueva en la ventana que tienes. Acepta URLs y archivos como argumentos 
 |---|---|
 | Pestañas | Animadas, se reordenan arrastrando, **fijadas**, **grupos de colores con nombre** que se pliegan, indicador de sonido y silenciar (Ctrl+M), **dormir pestañas** inactivas para ahorrar memoria, **pantalla dividida** (Ctrl+Shift+D), menú con clic derecho |
 | Navegación | Pantalla de bienvenida al arrancar (desactivable en *Apariencia*), sugerencias en la barra de direcciones con iconos, pestañas abiertas, accesos e historial, paleta de comandos (Ctrl+K), página de inicio animada con **esferas** de accesos que se añaden, editan, colorean y se colocan arrastrándolas donde quieras («⊞ Ordenar esferas» las devuelve a la cuadrícula), buscar en la página (Ctrl+F), **modo lectura** (F9), **vídeo flotante** (Ctrl+Shift+V), gestor de **descargas** con progreso, pausa y reanudación |
-| Privacidad | Bloqueador de anuncios y rastreadores, Do Not Track y GPC, bloquear cookies de terceros, **ventana de incógnito** (Ctrl+Shift+N), **perfiles** separados (Personal, Uni…) |
-| Contraseñas | Guarda y rellena; **generador** al registrarte; cifradas (llavero de GNOME/KDE en Linux, DPAPI en Windows); **contraseña maestra** o **Windows Hello** para verlas, copiarlas o rellenarlas; importar el CSV de Chrome o Edge. Los scripts de contraseñas corren aislados de la web: ninguna página puede espiarlos ni fingir que has escrito una contraseña |
+| Privacidad | Bloqueador de anuncios y rastreadores (lista ampliada de StevenBlack/hosts, unos 75.000 dominios, que se renueva sola cada semana), Do Not Track y GPC, bloquear cookies de terceros, **ventana de incógnito** (Ctrl+Shift+N), **perfiles** separados (Personal, Uni…) |
+| Permisos | Cuando una web pide la **cámara, el micrófono, tu ubicación, enviarte notificaciones o compartir la pantalla** (Meet, Teams, Discord…), Aurora te pregunta y recuerda la respuesta para ese sitio. Se revisan y se olvidan en *Ajustes → Privacidad*. Las notificaciones salen como las del sistema |
+| Contraseñas | Guarda y rellena; **generador** al registrarte; cifradas (llavero de GNOME/KDE en Linux, DPAPI en Windows); **contraseña maestra** o **Windows Hello** para verlas, copiarlas o rellenarlas (es un bloqueo de la interfaz, como en Chrome: el cifrado lo pone el llavero o DPAPI de tu sesión); importar el CSV de Chrome o Edge. Los scripts de contraseñas corren aislados de la web: ninguna página puede espiarlos ni fingir que has escrito una contraseña |
 | Desarrolladores (F12) | Inspector de Chromium, consola JS, registro de red, **cliente de API** tipo Postman, **auditoría** (accesibilidad, SEO, rendimiento, seguridad, enlaces rotos), modo responsive, User-Agent, CSS en vivo, servidor local con recarga en vivo, **cuentagotas y medidor** (Ctrl+Shift+X), **captura de página completa**, visor de JSON |
 | Temas (Ajustes → Temas) | Tienda al estilo de Opera: 7 temas integrados (también claros), más desde la tienda en línea. Cambian los colores de toda la interfaz, el fondo de la página de inicio (animación, imagen o vídeo) y los sonidos. **Editor** para crear los tuyos y compartirlos como archivo `.aurora-tema`. Ver `tienda/README.md` |
 | Importar | Desde Chrome, Chromium, Brave, Edge o Vivaldi (*Ajustes → General* o Ctrl+K): marcadores, historial, contraseñas (también las de tu cuenta de Google), buscador y sesiones iniciadas. Las contraseñas se descifran con la clave del navegador y se vuelven a cifrar con la de Aurora |
-| Sincronización | Accesos, historial y contraseñas entre tus PCs (Windows y Linux) a través de una carpeta de OneDrive, Dropbox, Syncthing… Con una frase de paso, las contraseñas y el historial viajan cifrados con AES |
+| Sincronización | Accesos, historial y contraseñas entre tus PCs (Windows y Linux) a través de una carpeta de OneDrive, Dropbox, Syncthing… Con una frase de paso, las contraseñas y el historial viajan cifrados con AES. Se hace en segundo plano (la ventana no se congela aunque la nube tarde) y todo lo que llega se valida |
 | Extensiones | Userscripts `.user.js` (compatibles con Tampermonkey), estilos `.user.css` y extensiones en Python con API propia (solo se ejecutan si las apruebas). Incluye 4 de ejemplo |
 | Asistente IA (Ctrl+Shift+A) | Elige tu IA (Claude, ChatGPT, Gemini, Copilot, Perplexity o Le Chat) e inicia sesión con tu cuenta en el panel lateral: las conversaciones se guardan en ella. Los botones rápidos (resumir, traducir, explicar) escriben la petición con el texto de la página en el chat; la envías tú con Enter. Avanzado: con clave de API de Claude o cualquier proveedor compatible con OpenAI, incluido **Ollama** (gratis y en tu PC) |
 | Ajustes (Ctrl+,) | General, Apariencia (7 colores de acento), Privacidad, Contraseñas, Historial, Accesos, Descargas, Perfiles, Sincronización, Extensiones, Asistente IA, Desarrolladores |
@@ -73,6 +76,9 @@ pestaña nueva en la ventana que tienes. Acepta URLs y archivos como argumentos 
 En la carpeta `.aurora` de tu usuario (`~/.aurora` en Linux, `C:\Users\<tú>\.aurora` en Windows). La carpeta `perfiles\` contiene los perfiles extra y `extensiones\` las
 extensiones. No se borra al desinstalar. En Linux la carpeta y sus archivos solo los puede leer tu usuario
 (permisos 700/600).
+
+Si un archivo de datos se daña (un corte de luz, un disco lleno…), Aurora no lo pisa: lo aparta como
+`nombre.danado-<fecha>.json` y te avisa, para que puedas recuperarlo.
 
 ## Escribir una extensión
 
@@ -114,6 +120,7 @@ aurora/
   pestanas.py           barra de pestañas, grupos y fijadas
   organizacion.py       grupos, dormir pestañas, pantalla dividida y menús
   omnibox.py · paleta.py  barra de direcciones, paleta de comandos y buscador
+  permisos.py           cámara, micrófono, ubicación, notificaciones y compartir pantalla
   motor.py              bloqueador, páginas y modo responsive
   desarrollo.py · herramientas_dev.py   panel F12 y sus herramientas
   multimedia.py         modo lectura y vídeo flotante
@@ -139,12 +146,16 @@ pip install -r requirements.txt pytest
 python -m pytest tests
 ```
 
-Funcionan sin pantalla (Qt en modo `offscreen`) y con un HOME temporal: no tocan tu `~/.aurora` ni tu
-llavero. Incluyen un Chromium real para comprobar que las webs no pueden falsificar ni espiar el puente de
-contraseñas.
+Funcionan en Linux y en Windows, sin pantalla (Qt en modo `offscreen`) y con una carpeta de usuario temporal:
+no tocan tu `.aurora` ni tu llavero. Incluyen un Chromium real para comprobar que las webs no pueden
+falsificar ni espiar el puente de contraseñas.
 
 ## Límites conocidos
 
+- **Actualizaciones de seguridad.** Aurora usa el Chromium que trae QtWebEngine, y QtWebEngine recibe los
+  parches de seguridad de Chrome con semanas o meses de retraso. En Fedora, `dnf upgrade` lo mantiene al día;
+  con el PyQt6 de pip (Windows) solo se actualiza reinstalando (`pip install -U PyQt6-WebEngine`). Para la
+  banca y webs delicadas, mejor un navegador con actualizaciones automáticas.
 - Netflix, Disney+, Spotify… necesitan Widevine (DRM). Aurora no puede incluirlo (es de Google), pero usa el de
   un Chrome, Chromium, Edge, Brave o Vivaldi instalado: con Google Chrome instalado funciona sin hacer nada.
   El estado se ve en *Ajustes → Privacidad y seguridad*. En Windows, Netflix exige además navegadores firmados
@@ -153,5 +164,12 @@ contraseñas.
   `instalar-fedora.sh`). Con el PyQt6 de pip, en Windows incluido, solo se ven WebM, VP9 y AV1.
 - No es compatible con las extensiones de la Chrome Web Store (sí con los userscripts).
 - El vídeo flotante abre una ventanita propia; no usa el picture-in-picture del sistema.
+- Compartir pantalla en Wayland pasa por el portal del escritorio (GNOME te pregunta qué compartir).
 - El asistente usa tu cuenta de la IA que elijas, tu propia clave o un modelo local; Aurora no incluye ningún
   servicio de IA. Algunas webs pueden bloquear «Continuar con Google» dentro del panel: usa correo y contraseña.
+
+## Licencia
+
+Aurora es de **NMM** y es software libre bajo la [GNU GPL v3](LICENSE) (la misma licencia que PyQt6, en la
+que se basa): puedes usarlo, estudiarlo, modificarlo y compartirlo, siempre que lo que compartas siga siendo
+libre.

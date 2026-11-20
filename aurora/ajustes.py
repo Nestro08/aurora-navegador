@@ -664,8 +664,32 @@ class Ajustes(QWidget):
         t = Tarjeta()
         t.fila("Bloquear anuncios y rastreadores", "Bloquea las peticiones a dominios de publicidad conocidos.",
                interruptor(v.bloqueador.activo, v.set_bloqueo))
-        lista = t.fila("Lista de bloqueo", f"{len(v.bloqueador.dominios)} dominios. Puedes añadir los tuyos en "
-                                           f"bloqueados.txt (uno por línea).")
+        def miles(n):
+            return f"{n:,}".replace(",", ".")
+
+        def texto_ampliada():
+            fecha = listas().fecha()
+            if not listas().ampliada:
+                return "Aún no descargada: se descarga sola unos segundos después de abrir Aurora."
+            return (f"{miles(len(listas().ampliada))} dominios de StevenBlack/hosts (la de Pi-hole). Actualizada el "
+                    f"{fecha:%d/%m/%Y}; se renueva sola cada semana.")
+
+        ampliada = t.fila("Lista ampliada", texto_ampliada(),
+                          interruptor(a.get("bloqueo_ampliado", True), lambda c: v.set_bloqueo_ampliado(c)))
+
+        def actualizar():
+            ampliada.desc.setText("Descargando…")
+
+            def hecho(ok, mensaje):
+                try:
+                    ampliada.desc.setText(texto_ampliada() if ok else mensaje)
+                except RuntimeError:  # se cerró la pantalla mientras tanto
+                    pass
+            listas().actualizar(hecho)
+
+        ampliada.layout().addWidget(botones(("Actualizar ahora", actualizar)))
+        lista = t.fila("Tu lista", f"{miles(len(v.bloqueador.dominios))} dominios (los de Aurora y los tuyos de "
+                                   f"bloqueados.txt, uno por línea).")
 
         def editar():
             archivo = DATOS / "bloqueados.txt"
@@ -674,8 +698,9 @@ class Ajustes(QWidget):
             QDesktopServices.openUrl(QUrl.fromLocalFile(str(archivo)))
 
         def recargar():
-            v.bloqueador.cargar_lista()
-            lista.desc.setText(f"{len(v.bloqueador.dominios)} dominios. Lista recargada.")
+            for p in list(gestor().perfiles.values()) + list(gestor().incognitos.values()):
+                p.bloqueador.cargar_lista()
+            lista.desc.setText(f"{miles(len(v.bloqueador.dominios))} dominios. Lista recargada.")
 
         lista.layout().addWidget(botones(("Editar", editar), ("Recargar", recargar)))
         t.fila("Pedir a las webs que no me rastreen", "Envía las cabeceras «Do Not Track» y «Global Privacy Control».",
@@ -691,6 +716,25 @@ class Ajustes(QWidget):
                f"✓ Activo: Widevine {w['version']}, de {w['navegador']}. Netflix, Spotify, Disney+… pueden reproducirse."
                if w else "⚠ No disponible: Netflix, Spotify, Disney+… no se reproducirán. Instala Google Chrome (no hace "
                          "falta usarlo: Aurora aprovecha su módulo Widevine) y reinicia Aurora.")
+        l.addWidget(t)
+
+        self._sub(l, "Permisos de los sitios")
+        t = Tarjeta()
+        from . import permisos
+        guardados = permisos.permisos_guardados(v.p)
+        if not guardados:
+            t.fila("Ningún permiso guardado", "Cuando una web pida la cámara, el micrófono, tu ubicación o enviarte "
+                                              "notificaciones, Aurora te preguntará y lo recordará aquí. Compartir "
+                                              "la pantalla se pregunta siempre.")
+        for origen, tipo, permitido in guardados:
+            fila = t.fila(QUrl(origen).host() or origen,
+                          f"{'✓ Permitido' if permitido else '🚫 Bloqueado'}: {permisos.descripcion(tipo)[1]}")
+
+            def olvidar(_=False, o=origen, ti=tipo, f=fila):
+                permisos.olvidar_permiso(v.p, o, ti)
+                f.desc.setText("Olvidado: la próxima vez te preguntará")
+
+            fila.layout().addWidget(botones(("Olvidar", olvidar)))
         l.addWidget(t)
 
         self._sub(l, "Borrar datos de navegación")
@@ -871,13 +915,20 @@ class Ajustes(QWidget):
             if not ruta:
                 return
             n = 0
-            with open(ruta, newline="", encoding="utf-8-sig") as f:
-                for fila in csv.DictReader(f):
-                    url = fila.get("url") or fila.get("origin") or ""
-                    clave = fila.get("password") or ""
-                    if url and clave:
-                        claves.guardar_cuenta(Contrasenas.origen(url), fila.get("username", ""), clave)
-                        n += 1
+            try:
+                with open(ruta, newline="", encoding="utf-8-sig") as f:
+                    for fila in csv.DictReader(f):
+                        url = (fila.get("url") or fila.get("origin") or "").strip()
+                        clave = fila.get("password") or ""
+                        if url.startswith(("http://", "https://")) and clave:
+                            claves.guardar_cuenta(Contrasenas.origen(url), (fila.get("username") or "").strip(), clave,
+                                                  guardar=False)  # una sola escritura al final
+                            n += 1
+            except (OSError, UnicodeDecodeError, csv.Error) as e:
+                QMessageBox.warning(self, "Importar contraseñas", f"No se pudo leer el archivo:\n{e}")
+                return
+            finally:
+                claves.guardar()
             rellenar()
             v.aviso.mostrar(f"🔑  {n} contraseñas importadas")
 
@@ -1249,11 +1300,20 @@ class Ajustes(QWidget):
             if not (a["sync_activa"] and a["sync_carpeta"]):
                 v.aviso.mostrar("Activa la sincronización y elige una carpeta")
                 return
+            def listo(ok, mensaje):
+                sync.terminado.disconnect(listo)
+                try:
+                    estado.desc.setText(f"Última sincronización: {sync.estado.datos.get('ultima') or 'nunca'}."
+                                        if ok else mensaje)
+                except RuntimeError:  # se cerró la pantalla de ajustes mientras tanto
+                    pass
+
+            if sync._en_curso:
+                v.aviso.mostrar("⇅  Ya se está sincronizando…")
+                return
+            estado.desc.setText("Sincronizando…")
+            sync.terminado.connect(listo)
             sync.sincronizar()
-            try:
-                estado.desc.setText(f"Última sincronización: {sync.estado.datos.get('ultima') or 'nunca'}.")
-            except RuntimeError:
-                pass
 
         estado.layout().addWidget(botones(("⇅  Sincronizar ahora", ahora, "primario")))
         l.addWidget(t)
@@ -1462,6 +1522,8 @@ class Ajustes(QWidget):
                       f"  ·  Python {sys.version.split()[0]}", objectName="tenue")
         info.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         textos.addWidget(info)
+        from . import __author__
+        textos.addWidget(QLabel(f"Hecho por {__author__}  ·  Software libre con licencia GNU GPL v3", objectName="tenue"))
         cab.addWidget(logo)
         cab.addSpacing(14)
         cab.addLayout(textos, 1)

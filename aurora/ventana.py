@@ -16,6 +16,7 @@ from .multimedia import MixinMultimedia
 from .descargas import MixinDescargas
 from .herramientas_dev import MixinDev
 from .asistente import PanelAsistente
+from .permisos import MixinPermisos
 from . import temas
 from .temas import Apariencia, sonidos
 
@@ -56,7 +57,7 @@ class BotonPerfil(QAbstractButton):
         p.drawText(r, Qt.AlignmentFlag.AlignCenter, perfil.nombre[:1].upper())
 
 
-class Ventana(QMainWindow, MixinOrganizacion, MixinMultimedia, MixinDescargas, MixinDev):
+class Ventana(QMainWindow, MixinOrganizacion, MixinMultimedia, MixinDescargas, MixinDev, MixinPermisos):
     def __init__(self, perfil=None, urls=None, restaurar=True):
         super().__init__()
         self.p = perfil or gestor().perfil()
@@ -111,6 +112,16 @@ class Ventana(QMainWindow, MixinOrganizacion, MixinMultimedia, MixinDescargas, M
         if self.p.sync and len(self.p.ventanas) == 1:
             QTimer.singleShot(3000, lambda: self.p.sync.sincronizar(silencioso=True))
         self.barra_titulo_oscura()
+        if Almacen.recuperados:
+            QTimer.singleShot(1500, self._avisar_recuperados)
+
+    def _avisar_recuperados(self):
+        copias, Almacen.recuperados[:] = list(Almacen.recuperados), []
+        if copias:
+            QMessageBox.warning(self, "Datos dañados",
+                                "Algunos archivos de datos de Aurora estaban dañados y no se podían leer. "
+                                "Se han apartado (no se ha borrado nada) para que no se pierdan:\n\n"
+                                + "\n".join(str(c) for c in copias))
 
     def restaurar_sesion(self):
         a = self.ajustes.datos
@@ -325,13 +336,20 @@ class Ventana(QMainWindow, MixinOrganizacion, MixinMultimedia, MixinDescargas, M
             p.drawRect(self.rect().adjusted(0, 0, -1, -1))
 
     def barra_titulo_oscura(self):
-        """En Windows 10/11 pone la barra de título oscura y del mismo color que la interfaz."""
+        """En Windows 10/11 pinta la barra de título del sistema con los colores del tema (claro u oscuro)."""
         if sys.platform != "win32":
             return
+
+        def colorref(color):  # Windows quiere 0x00BBGGRR
+            c = QColor(color)
+            return c.red() | c.green() << 8 | c.blue() << 16
+
+        fondo = C_INCOG if self.incognito else C["fondo"]
+        oscuro = int(QColor(fondo).lightnessF() < 0.5)
         try:
             import ctypes
             hwnd, dwm = int(self.winId()), ctypes.windll.dwmapi
-            for atributo, valor in ((20, 1), (35, 0x00140F0D), (36, 0x00EEE8E6)):
+            for atributo, valor in ((20, oscuro), (35, colorref(fondo)), (36, colorref(C["texto"]))):
                 v = ctypes.c_int(valor)
                 dwm.DwmSetWindowAttribute(hwnd, atributo, ctypes.byref(v), ctypes.sizeof(v))
         except Exception:
@@ -372,7 +390,6 @@ class Ventana(QMainWindow, MixinOrganizacion, MixinMultimedia, MixinDescargas, M
 
     # ────────────────────────────────────────────────────────── comandos y atajos
     def registrar_comandos(self):
-        W = QWebEnginePage.WebAction
         self.comandos = [
             ("Nueva pestaña", "Ctrl+T", lambda: self.nueva_pestana()),
             ("Cerrar pestaña", "Ctrl+W", lambda: self.cerrar(self.chip_activo)),
@@ -447,8 +464,8 @@ class Ventana(QMainWindow, MixinOrganizacion, MixinMultimedia, MixinDescargas, M
         for _, atajo, funcion in self.comandos:
             if atajo:
                 QShortcut(QKeySequence(atajo), self).activated.connect(funcion)
-        for _, _, atajo, funcion in extensiones().comandos:
-            self.registrar_atajo_extension(atajo, funcion)
+        for ident, _, atajo, funcion in extensiones().comandos:
+            self.registrar_atajo_extension(atajo, funcion, ident)
         for atajo, funcion in (("Ctrl+R", lambda: self.vista().reload()), ("Ctrl+=", lambda: self.zoom(0.1)),
                                ("F6", self.enfocar_omni), ("Ctrl+Shift+P", self.abrir_paleta)):
             QShortcut(QKeySequence(atajo), self).activated.connect(funcion)
@@ -456,9 +473,22 @@ class Ventana(QMainWindow, MixinOrganizacion, MixinMultimedia, MixinDescargas, M
         self.atajo_esc.activated.connect(self.salir_pantalla_completa)
         self.atajo_esc.setEnabled(False)
 
-    def registrar_atajo_extension(self, atajo, funcion):
+    def registrar_atajo_extension(self, atajo, funcion, ident=""):
         if atajo:
-            QShortcut(QKeySequence(atajo), self).activated.connect(funcion)
+            atajo = QShortcut(QKeySequence(atajo), self)
+            atajo.activated.connect(funcion)
+            self.__dict__.setdefault("_atajos_ext", []).append((ident, atajo))
+
+    def quitar_atajos_extension(self, ident):
+        """Al apagar o recargar una extensión, sus atajos dejan de funcionar (y no se duplican al volver)."""
+        quedan = []
+        for i, atajo in getattr(self, "_atajos_ext", []):
+            if i == ident:
+                atajo.setEnabled(False)
+                atajo.deleteLater()
+            else:
+                quedan.append((i, atajo))
+        self._atajos_ext = quedan
 
     def _alternar_division(self):
         if self.division:
@@ -519,6 +549,7 @@ class Ventana(QMainWindow, MixinOrganizacion, MixinMultimedia, MixinDescargas, M
         v.loadFinished.connect(lambda ok, c=chip: self._fin_carga(c, ok))
         p.findTextFinished.connect(self.buscador.resultado)
         p.fullScreenRequested.connect(self.pantalla_completa_web)
+        self.conectar_permisos(p)
         p.pdfPrintingFinished.connect(
             lambda ruta, ok: self.aviso.mostrar(f"📄  PDF guardado: {Path(ruta).name}" if ok else "No se pudo crear el PDF"))
         p.action(QWebEnginePage.WebAction.InspectElement).triggered.connect(lambda: self.panel.abrir(0))
@@ -577,6 +608,7 @@ class Ventana(QMainWindow, MixinOrganizacion, MixinMultimedia, MixinDescargas, M
         self.tira.quitar(chip)
         self.pila.removeWidget(chip.pagina)
         chip.pagina.deleteLater()
+        self.guardar_sesion()
 
     def reabrir(self):
         if self.cerradas:
@@ -622,6 +654,7 @@ class Ventana(QMainWindow, MixinOrganizacion, MixinMultimedia, MixinDescargas, M
         if not ok:
             return
         self.registrar_historial(pagina.vista)
+        self.guardar_sesion()
         pagina.vista.page().runJavaScript(JS_JSON)
         # con la protección activada no se rellena solo: hay que pedirlo con la llave (y verificarse)
         if self.ajustes.datos["autorrellenar"] and not self.ajustes.datos["proteger_pw"]:
@@ -843,6 +876,8 @@ class Ventana(QMainWindow, MixinOrganizacion, MixinMultimedia, MixinDescargas, M
         piezas = []
         for i, m in enumerate(lista):
             titulo, url = m.get("titulo") or m["url"], m["url"]
+            if not url_segura(url):  # nunca un javascript: en la página de inicio (es un file:// con el token)
+                url = "#"
             host = Favicons.host(url)
             icono_web = favicons().ruta(host) if host else None
             if m.get("icono"):
@@ -938,8 +973,9 @@ class Ventana(QMainWindow, MixinOrganizacion, MixinMultimedia, MixinDescargas, M
                     m[existente] = entrada
             self.aviso.mostrar(f"★  «{entrada['titulo']}» en tu página de inicio")
         elif accion == "borrar" and 0 <= i < len(m):
-            self.p.marcar_borrado_marcador(m[i]["url"])
-            del m[i]
+            quitado = m.pop(i)
+            self.p.marcar_borrado_marcador(quitado["url"])
+            self._ofrecer_deshacer(i, quitado)
         elif accion == "colocar" and 0 <= i < len(m):
             x, y = (max(0.02, min(0.98, float(d.get(k, 0.5)))) for k in ("x", "y"))
             m[i]["pos"] = {"x": round(x, 4), "y": round(y, 4)}
@@ -957,6 +993,28 @@ class Ventana(QMainWindow, MixinOrganizacion, MixinMultimedia, MixinDescargas, M
             ventana.generar_nueva()
             ventana.recargar_nuevas(excepto)
             ventana._estrella()
+
+    def _ofrecer_deshacer(self, i, entrada):
+        """Quitar una esfera no pide confirmación, pero se puede deshacer durante unos segundos."""
+        def deshacer():
+            m = self.marcadores.datos
+            if any(x["url"] == entrada["url"] for x in m):
+                return
+            entrada["ts"] = datetime.now().timestamp()  # más nuevo que el borrado: vuelve también en tus otros PCs
+            m.insert(min(i, len(m)), entrada)
+            self.marcadores.guardar()
+            for ventana in self.p.ventanas:
+                ventana.generar_nueva()
+                ventana.recargar_nuevas()
+                ventana._estrella()
+
+        titulo = "Acceso quitado"
+        self.pregunta.mostrar(titulo, f"«{html.escape(entrada.get('titulo') or entrada['url'])}» ya no está en tu "
+                                      "página de inicio.", [("Deshacer", deshacer, True)], "borrar")
+        reloj = QTimer(self, singleShot=True, interval=8000)  # hijo de la ventana: muere con ella
+        reloj.timeout.connect(lambda: self.pregunta.ocultar() if self.pregunta.titulo.text() == titulo else None)
+        reloj.timeout.connect(reloj.deleteLater)
+        reloj.start()
 
     def set_buscador(self, nombre):
         self.ajustes.datos["buscador"] = nombre
@@ -1083,6 +1141,7 @@ class Ventana(QMainWindow, MixinOrganizacion, MixinMultimedia, MixinDescargas, M
         for ventana in gestor().todas_las_ventanas():
             ventana.generar_nueva()
             ventana.recargar_nuevas()
+            ventana.barra_titulo_oscura()
 
     def set_fuente(self, nombre):
         self.set_ajuste("tam_fuente", nombre)
@@ -1092,6 +1151,13 @@ class Ventana(QMainWindow, MixinOrganizacion, MixinMultimedia, MixinDescargas, M
     def set_dnt(self, activo):
         self.bloqueador.dnt = activo
         self.set_ajuste("dnt", activo)
+
+    def set_bloqueo_ampliado(self, activo):
+        for p in list(gestor().perfiles.values()) + list(gestor().incognitos.values()):
+            if p.ajustes is self.ajustes:  # el perfil y su incógnito comparten ajustes
+                p.bloqueador.ampliado = activo
+        self.set_ajuste("bloqueo_ampliado", activo)
+        self.vista().reload()
 
     def borrar_datos(self, historial, cookies, cache, descargas):
         hecho = []
@@ -1256,9 +1322,18 @@ class Ventana(QMainWindow, MixinOrganizacion, MixinMultimedia, MixinDescargas, M
         self.aviso.mostrar("🔗  URL copiada")
 
     def borrar_datos_sitio(self):
-        self.vista().page().runJavaScript(JS_BORRAR_SITIO)
-        self.vista().reload()
-        self.aviso.mostrar(f"🧹  Datos de {self.vista().url().host()} borrados")
+        """Cookies (también las HttpOnly), almacenamiento, cachés y service workers del sitio actual."""
+        vista = self.vista()
+        url = vista.url()
+        host = url.host()
+        if not host:
+            self.aviso.mostrar("Esta página no tiene datos de sitio")
+            return
+        tienda, cookies = self.perfil.cookieStore(), self.p.cookies_de(host)
+        for c in cookies:
+            tienda.deleteCookie(c, QUrl(f"{url.scheme()}://{host}/"))
+        vista.page().runJavaScript(JS_BORRAR_SITIO, lambda _: vista.reload())
+        self.aviso.mostrar(f"🧹  Datos de {host} borrados ({len(cookies)} cookies)")
 
     def servir_carpeta(self):
         carpeta = QFileDialog.getExistingDirectory(self, "Carpeta del proyecto web")
@@ -1297,19 +1372,28 @@ class Ventana(QMainWindow, MixinOrganizacion, MixinMultimedia, MixinDescargas, M
         self.aviso.mostrar(f"↻  {archivo} cambió")
 
     # ────────────────────────────────────────────────────────── cierre
+    def guardar_sesion(self, ya=False):
+        """Pestañas abiertas para restaurarlas. También mientras navegas: si Aurora se cierra de golpe
+        (apagón, cuelgue…), al volver a abrirlo siguen ahí."""
+        if self.incognito or not getattr(self, "tira", None):
+            return
+        if not ya and self is not self.p.ventana_activa():  # con varias ventanas, manda la que usas
+            return
+        sesion = []
+        for c in self.tira.chips:
+            u = c.pagina.vista.url()
+            sesion.append({"url": "" if self.es_nueva(u) else u.toString(), "fijada": c.fijada, "grupo": c.grupo})
+        self.ajustes.datos["sesion"] = sesion
+        self.ajustes.datos["grupos"] = {k: dict(g) for k, g in self.grupos.items()}
+        self.ajustes.datos["ancho_panel"] = self.panel.ancho
+        self.ajustes.guardar() if ya else self.ajustes.guardar_luego(4000)
+
     def closeEvent(self, e):
         ultima = len(self.p.ventanas) == 1
         if not self.incognito and ultima:
-            sesion = []
-            for c in self.tira.chips:
-                u = c.pagina.vista.url()
-                sesion.append({"url": "" if self.es_nueva(u) else u.toString(), "fijada": c.fijada, "grupo": c.grupo})
-            self.ajustes.datos["sesion"] = sesion
-            self.ajustes.datos["grupos"] = {k: dict(g) for k, g in self.grupos.items()}
-            self.ajustes.datos["ancho_panel"] = self.panel.ancho
-            self.ajustes.guardar()
-            if self.p.sync:
-                self.p.sync.sincronizar(silencioso=True)
+            self.guardar_sesion(ya=True)
+            if self.p.sync:  # al cerrar, de una vez: si fuera en un hilo, Aurora podría salir antes de escribir
+                self.p.sync.sincronizar(silencioso=True, bloqueante=True)
         for f in list(self.flotantes):
             f.close()
         for s in self.servidores:

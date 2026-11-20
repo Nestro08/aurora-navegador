@@ -70,6 +70,12 @@ def _escuchar(app):
     return servidor
 
 
+def _actualizar_listas():
+    if listas().toca_actualizar() and any(p.ajustes.datos.get("bloqueo_ampliado", True)
+                                          for p in gestor().perfiles.values()):
+        listas().actualizar()
+
+
 def main():
     try:
         extra = json.loads((DATOS / "ajustes.json").read_text(encoding="utf-8")).get("flags", "")
@@ -107,6 +113,7 @@ def main():
     app.setPalette(paleta_qt())
     app.setStyleSheet(hoja_estilo())
     servidor = _escuchar(app)  # noqa: F841  (se mantiene vivo mientras dure la app)
+    QTimer.singleShot(20000, _actualizar_listas)  # lista de bloqueo: con Aurora ya abierto, sin estorbar
     app.aboutToQuit.connect(Almacen.volcar_pendientes)
     if Apariencia.datos().get("arranque", True):
         nombre = perfil.ajustes.datos.get("nombre", "")

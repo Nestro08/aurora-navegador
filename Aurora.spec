@@ -6,7 +6,7 @@ a = Analysis(
     ["Aurora.pyw"],
     pathex=[],
     binaries=[],
-    datas=[("recursos/aurora.png", "recursos")],
+    datas=[("recursos/aurora.png", "recursos"), ("LICENSE", ".")],
     hiddenimports=["PyQt6.QtWebEngineCore", "PyQt6.QtWebEngineWidgets", "PyQt6.QtNetwork", "PyQt6.QtMultimedia",
                    "cryptography.fernet", "importlib.util"],
     excludes=["tkinter", "PyQt6.QtQuick3D", "PyQt6.QtBluetooth"],

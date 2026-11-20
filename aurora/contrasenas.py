@@ -147,6 +147,12 @@ def descifrar(valor):
 class Contrasenas(Almacen):
     def __init__(self, carpeta=None):
         super().__init__("contrasenas", {"cuentas": [], "nunca": []}, carpeta)
+        if not isinstance(self.datos.get("cuentas"), list):
+            self.datos["cuentas"] = []
+        if not isinstance(self.datos.get("nunca"), list):
+            self.datos["nunca"] = []
+        self.datos["cuentas"] = [c for c in self.datos["cuentas"] if isinstance(c, dict)
+                                 and all(isinstance(c.get(k), str) for k in ("origen", "usuario", "clave"))]
         self.al_borrar = None  # lo usa la sincronización para registrar borrados
         self._migrar()
 
@@ -230,12 +236,13 @@ class Pregunta(QFrame):
         self.icono = QLabel(Iconos.glifo("llave"))
         self.icono.setFont(Iconos.fuente(13))
         self.titulo = QLabel(objectName="tituloPregunta")
+        self.titulo.setWordWrap(True)  # un título largo baja de línea en vez de cortarse
         cerrar = BotonIcono("cerrar", "Ahora no", tam=28)
         cerrar.clicked.connect(self.ocultar)
-        cab.addWidget(self.icono)
+        cab.addWidget(self.icono, 0, Qt.AlignmentFlag.AlignTop)
         cab.addSpacing(6)
         cab.addWidget(self.titulo, 1)
-        cab.addWidget(cerrar)
+        cab.addWidget(cerrar, 0, Qt.AlignmentFlag.AlignTop)
         self.detalle = QLabel(objectName="tenue")
         self.detalle.setWordWrap(True)
         self.botones = QHBoxLayout()
@@ -251,11 +258,13 @@ class Pregunta(QFrame):
         self.anim.setEasingCurve(QEasingCurve.Type.OutBack)
         self.anim.finished.connect(lambda: None if self._abierta else self.hide())
 
-    def mostrar(self, titulo, detalle, botones):
+    def mostrar(self, titulo, detalle, botones, icono="llave"):
         while self.botones.count():
             w = self.botones.takeAt(0).widget()
             if w:
+                w.hide()  # se borra luego, pero ya no se ve ni se puede pulsar
                 w.deleteLater()
+        self.icono.setText(Iconos.glifo(icono))
         self.titulo.setText(titulo)
         self.detalle.setText(detalle)
         self.botones.addStretch()
@@ -263,7 +272,8 @@ class Pregunta(QFrame):
             b = QPushButton(texto, objectName="primario" if primario else "")
             b.clicked.connect(lambda _, f=funcion: (f(), self.ocultar()))
             self.botones.addWidget(b)
-        self.adjustSize()
+            b.show()  # si la tarjeta ya estaba abierta, Qt no enseña solo los botones nuevos
+        self._ajustar_alto()
         x = self.v.pila.width() - self.width() - 18
         if not self._abierta:
             self.move(x, -self.height() - 10)
@@ -272,6 +282,21 @@ class Pregunta(QFrame):
         self.raise_()
         self.anim.setEasingCurve(QEasingCurve.Type.OutBack)
         animar(self.anim, self.pos(), QPoint(x, 12))
+
+    def _ajustar_alto(self):
+        """Alto justo para los textos, que pueden ocupar varias líneas (el ancho de la tarjeta es fijo)."""
+        for w in [self] + self.findChildren(QWidget):  # la hoja de estilo (título en negrita…) cambia el tamaño
+            w.ensurePolished()
+        etiquetas = (self.titulo, self.detalle)
+        for e in etiquetas:
+            e.setMinimumHeight(0)
+        self.layout().invalidate()
+        self.layout().activate()  # coloca las etiquetas con su ancho real
+        for e in etiquetas:
+            e.setMinimumHeight(e.heightForWidth(e.width()) if e.text() else 0)
+        self.layout().invalidate()
+        self.setFixedHeight(max(self.layout().totalMinimumSize().height(),
+                                self.layout().totalHeightForWidth(self.width())))
 
     def ocultar(self):
         if not self._abierta:

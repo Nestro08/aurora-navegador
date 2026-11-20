@@ -14,8 +14,9 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import quote_plus
 
-os.environ.setdefault("QTWEBENGINE_CHROMIUM_FLAGS",
-                      "--enable-smooth-scrolling --enable-features=OverlayScrollbar")
+# En Wayland, compartir pantalla (Meet, Teams, Discord…) va por PipeWire y el portal del escritorio
+_FUNCIONES = "OverlayScrollbar" + (",WebRTCPipeWireCapturer" if os.environ.get("XDG_SESSION_TYPE") == "wayland" else "")
+os.environ.setdefault("QTWEBENGINE_CHROMIUM_FLAGS", f"--enable-smooth-scrolling --enable-features={_FUNCIONES}")
 
 from PyQt6.QtCore import (QEasingCurve, QEvent, QFileSystemWatcher, QObject, QPoint, QPointF,
                           QPropertyAnimation, QRect, QRectF, QSize, QSizeF, QStandardPaths,
@@ -92,6 +93,11 @@ BLOQUEO_BASE = {
     "doubleclick.net", "googlesyndication.com", "googleadservices.com", "google-analytics.com",
     "adservice.google.com", "adnxs.com", "taboola.com", "outbrain.com", "criteo.com",
     "scorecardresearch.com", "facebook.net", "ads.yahoo.com", "amazon-adsystem.com", "hotjar.com",
+    "googletagservices.com", "pubmatic.com", "rubiconproject.com", "openx.net", "casalemedia.com", "moatads.com",
+    "quantserve.com", "clarity.ms", "smartadserver.com", "teads.tv", "media.net", "bluekai.com", "krxd.net",
+    "exelator.com", "demdex.net", "adsrvr.org", "bidswitch.net", "sharethrough.com", "3lift.com", "adform.net",
+    "serving-sys.com", "doubleverify.com", "adsafeprotected.com", "mathtag.com", "rlcdn.com", "tapad.com",
+    "yieldmo.com", "zedo.com", "popads.net", "propellerads.com", "mgid.com", "revcontent.com", "adcolony.com",
 }
 ACENTOS = {
     "Aurora": ("#7c5cff", "#22d3ee"), "Océano": ("#3b82f6", "#06b6d4"), "Bosque": ("#22c55e", "#a3e635"),
@@ -109,7 +115,7 @@ AJUSTES_DEFECTO = {
     "maestra": None, "grupos": {}, "sync_activa": False, "sync_carpeta": "", "sync_dispositivo": "",
     "sync_frase": "", "ia_proveedor": "Anthropic (Claude)", "ia_modelo": "claude-haiku-5-5",
     "ia_url": "http://localhost:11434/v1", "ia_clave": "", "ia_contexto": True,
-    "ia_modo": "", "ia_web": "Claude",
+    "ia_modo": "", "ia_web": "Claude", "bloqueo_ampliado": True,
 }
 NUEVA_INCOG = DATOS / "nueva-incognito.html"
 NUEVA_INCOG_URL = QUrl.fromLocalFile(str(NUEVA_INCOG)).toString()
@@ -148,7 +154,10 @@ document.head.innerHTML='<style>body{background:#0d0f14;color:#e6e8ee;font:13px/
 document.body.innerHTML='<div class=cab>✨ JSON formateado por Aurora</div><pre>'+j+'</pre>'})()"""
 
 JS_BORRAR_SITIO = ("(()=>{try{localStorage.clear();sessionStorage.clear();"
-                   "indexedDB.databases&&indexedDB.databases().then(d=>d.forEach(x=>indexedDB.deleteDatabase(x.name)))}catch(e){}})()")
+                   "indexedDB.databases&&indexedDB.databases().then(d=>d.forEach(x=>indexedDB.deleteDatabase(x.name)));"
+                   "window.caches&&caches.keys().then(k=>k.forEach(n=>caches.delete(n)));"
+                   "navigator.serviceWorker&&navigator.serviceWorker.getRegistrations()"
+                   ".then(r=>r.forEach(x=>x.unregister()))}catch(e){}return 1})()")
 
 PLANTILLA_NUEVA = r"""<!doctype html><html lang="es"><head><meta charset="utf-8"><title>Nueva pestaña</title>
 <style>
@@ -298,6 +307,23 @@ ACCESOS_DEFECTO = [
 
 # ═════════════════════════════ utilidades
 
+ESQUEMAS_ACCESO = ("http", "https", "file")
+
+
+def url_segura(url):
+    """True si es una dirección que se puede poner en un acceso (nunca javascript:, data:…)."""
+    return isinstance(url, str) and len(url) < 4096 and QUrl(url).scheme().lower() in ESQUEMAS_ACCESO
+
+
+def es_marcador(m):
+    return isinstance(m, dict) and url_segura(m.get("url")) and isinstance(m.get("titulo", ""), str)
+
+
+def es_visita(h):
+    return (isinstance(h, dict) and isinstance(h.get("url"), str) and isinstance(h.get("titulo", ""), str)
+            and isinstance(h.get("fecha"), str))
+
+
 def fijar_acento(nombre):
     T.a1, T.a2 = ACENTOS.get(nombre, ACENTOS["Aurora"])
 
@@ -419,21 +445,48 @@ class Iconos:
 class Almacen:
     """JSON en ~/.aurora para marcadores, historial y ajustes."""
 
+    pendientes = set()
+    recuperados = []  # copias de archivos dañados que se apartaron (la ventana avisa de ellas)
+
     def __init__(self, nombre, defecto, carpeta=None):
         self.ruta = Path(carpeta or DATOS) / f"{nombre}.json"
+        self.datos = defecto
         try:
-            self.datos = json.loads(self.ruta.read_text(encoding="utf-8"))
-        except (OSError, ValueError):
-            self.datos = defecto
+            texto = self.ruta.read_text(encoding="utf-8")
+        except UnicodeDecodeError:
+            self._apartar()
+            return
+        except OSError:
+            return
+        try:
+            datos = json.loads(texto)
+            if defecto is not None and not isinstance(datos, type(defecto)):
+                raise ValueError("tipo inesperado")
+            self.datos = datos
+        except ValueError:
+            self._apartar()
 
-    pendientes = set()
+    def _apartar(self):
+        """Un JSON dañado no se pisa al guardar: se guarda una copia para poder recuperarlo a mano."""
+        copia = self.ruta.with_name(f"{self.ruta.stem}.danado-{datetime.now():%Y%m%d-%H%M%S}.json")
+        try:
+            os.replace(self.ruta, copia)
+            Almacen.recuperados.append(copia)
+        except OSError:
+            pass
 
     def guardar(self):
         Almacen.pendientes.discard(self)
         temporal = self.ruta.with_suffix(".tmp")
-        temporal.write_text(json.dumps(self.datos, ensure_ascii=False, indent=1), encoding="utf-8")
+        texto = json.dumps(self.datos, ensure_ascii=False, indent=1).encode("utf-8")
+        # se crea ya con permisos 600: el contenido nunca es legible por otros usuarios, ni un instante
+        fd = os.open(temporal, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | getattr(os, "O_BINARY", 0), 0o600)
+        with os.fdopen(fd, "wb") as f:
+            f.write(texto)
+            f.flush()
+            os.fsync(f.fileno())
         if os.name == "posix":
-            os.chmod(temporal, 0o600)
+            os.chmod(temporal, 0o600)  # por si ya existía un .tmp antiguo con otros permisos
         os.replace(temporal, self.ruta)  # escritura atómica: nunca queda un JSON a medias
 
     def guardar_luego(self, ms=2000):

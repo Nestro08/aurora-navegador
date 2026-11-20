@@ -120,7 +120,7 @@ class AuroraAPI:
         """Añade un comando a la paleta (Ctrl+K) y, opcionalmente, un atajo de teclado."""
         self._g.comandos.append((self._ext.id, nombre, atajo, funcion))
         for v in self._g.ventanas():
-            v.registrar_atajo_extension(atajo, funcion)
+            v.registrar_atajo_extension(atajo, funcion, self._ext.id)
 
     def al_cargar(self, funcion):
         """funcion(url) se llama cada vez que termina de cargar una página."""
@@ -319,6 +319,8 @@ class GestorExtensiones(QObject):
             except Exception:
                 pass
         ext.modulo = None
+        for v in self.ventanas():
+            v.quitar_atajos_extension(ext.id)
         self.comandos = [c for c in self.comandos if c[0] != ext.id]
         self.al_cargar = [c for c in self.al_cargar if c[0] != ext.id]
 

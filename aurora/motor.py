@@ -4,9 +4,104 @@ from .widgets import *  # noqa: F401,F403
 from .pestanas import *  # noqa: F401,F403
 from .omnibox import *  # noqa: F401,F403
 from .paleta import *  # noqa: F401,F403
+from PyQt6.QtWebEngineCore import QWebEngineUrlRequestInfo
 
 
 # ═════════════════════════════ motor y página
+
+URL_LISTA = "https://raw.githubusercontent.com/StevenBlack/hosts/master/hosts"  # la que usa Pi-hole
+LISTA_AMPLIADA = DATOS / "listas" / "anuncios.txt"
+DIAS_LISTA = 7
+RE_DOMINIO = re.compile(r"^(?:0\.0\.0\.0|127\.0\.0\.1|::1?)?\s*([a-z0-9][a-z0-9.-]*\.[a-z]{2,})\s*(?:#.*)?$")
+
+
+def leer_dominios(texto):
+    """Dominios de un archivo hosts («0.0.0.0 dominio») o de una lista de un dominio por línea."""
+    res = set()
+    for linea in texto.splitlines():
+        m = RE_DOMINIO.match(linea.strip().lower())
+        if m and m.group(1) not in ("localhost", "localhost.localdomain", "local", "broadcasthost"):
+            res.add(m.group(1).rstrip("."))
+    return res
+
+
+class Listas(QObject):
+    """Lista ampliada de anuncios y rastreadores: se descarga por HTTPS y se renueva cada semana.
+
+    Se comparte entre todos los perfiles (son unos 75.000 dominios: no se cargan dos veces)."""
+    cambiada = pyqtSignal()
+
+    def __init__(self):
+        super().__init__()
+        self.ampliada = set()
+        self.red = None
+        self.descargando = False
+        self.cargar()
+
+    def cargar(self):
+        try:
+            self.ampliada = leer_dominios(LISTA_AMPLIADA.read_text(encoding="utf-8", errors="ignore"))
+        except OSError:
+            self.ampliada = set()
+
+    def fecha(self):
+        try:
+            return datetime.fromtimestamp(LISTA_AMPLIADA.stat().st_mtime)
+        except OSError:
+            return None
+
+    def toca_actualizar(self):
+        f = self.fecha()
+        return f is None or (datetime.now() - f).days >= DIAS_LISTA
+
+    def actualizar(self, al_terminar=None):
+        """Descarga la lista. al_terminar(ok, mensaje)."""
+        if self.descargando:
+            return
+        from PyQt6.QtNetwork import QNetworkAccessManager, QNetworkReply, QNetworkRequest
+        self.descargando = True
+        self.red = self.red or QNetworkAccessManager(self)
+        peticion = QNetworkRequest(QUrl(URL_LISTA))
+        peticion.setAttribute(QNetworkRequest.Attribute.RedirectPolicyAttribute,
+                              QNetworkRequest.RedirectPolicy.NoLessSafeRedirectPolicy)
+        r = self.red.get(peticion)
+        limite = 15 * 1024 * 1024
+        r.downloadProgress.connect(lambda recibido, total: r.abort() if max(recibido, total) > limite else None)
+
+        def fin():
+            self.descargando = False
+            r.deleteLater()
+            if r.error() != QNetworkReply.NetworkError.NoError:
+                mensaje = f"No se pudo descargar la lista: {r.errorString()}"
+                ok = False
+            else:
+                texto = bytes(r.readAll()).decode("utf-8", "ignore")
+                dominios = leer_dominios(texto)
+                if len(dominios) < 1000:  # una respuesta rara (página de error, lista vacía…) no se guarda
+                    ok, mensaje = False, "La lista descargada no parece válida: se mantiene la anterior"
+                else:
+                    LISTA_AMPLIADA.parent.mkdir(parents=True, exist_ok=True)
+                    temporal = LISTA_AMPLIADA.with_suffix(".tmp")
+                    temporal.write_text(texto, encoding="utf-8")
+                    os.replace(temporal, LISTA_AMPLIADA)
+                    self.ampliada = dominios
+                    self.cambiada.emit()
+                    ok, mensaje = True, f"🛡  Lista de bloqueo actualizada: {len(dominios):,} dominios".replace(",", ".")
+            if al_terminar:
+                al_terminar(ok, mensaje)
+
+        r.finished.connect(fin)
+
+
+_LISTAS = None
+
+
+def listas():
+    global _LISTAS
+    if _LISTAS is None:
+        _LISTAS = Listas()
+    return _LISTAS
+
 
 class Bloqueador(QWebEngineUrlRequestInterceptor):
     """Bloquea anuncios/rastreadores y avisa de cada petición (para el panel Red)."""
@@ -14,15 +109,26 @@ class Bloqueador(QWebEngineUrlRequestInterceptor):
     def __init__(self, receptor):
         super().__init__()
         self.receptor = receptor
-        self.activo = self.dnt = True
+        self.activo = self.dnt = self.ampliado = True
         self.cargar_lista()
 
     def cargar_lista(self):
         self.dominios = set(BLOQUEO_BASE)
         extra = DATOS / "bloqueados.txt"
         if extra.exists():
-            self.dominios |= {l.strip() for l in extra.read_text(encoding="utf-8").splitlines()
-                              if l.strip() and not l.startswith("#")}
+            self.dominios |= leer_dominios(extra.read_text(encoding="utf-8", errors="ignore"))
+
+    def total(self):
+        return len(self.dominios | listas().ampliada) if self.ampliado else len(self.dominios)
+
+    def bloquea(self, host):
+        partes = host.lower().split(".")
+        ampliada = listas().ampliada if self.ampliado else ()
+        for i in range(len(partes) - 1):
+            dominio = ".".join(partes[i:])
+            if dominio in self.dominios or dominio in ampliada:
+                return True
+        return False
 
     def interceptRequest(self, info):
         url = info.requestUrl()
@@ -30,9 +136,9 @@ class Bloqueador(QWebEngineUrlRequestInterceptor):
             info.setHttpHeader(b"DNT", b"1")
             info.setHttpHeader(b"Sec-GPC", b"1")
         bloquear = False
-        if self.activo:
-            partes = url.host().split(".")
-            bloquear = any(".".join(partes[i:]) in self.dominios for i in range(len(partes) - 1))
+        # la página a la que vas tú (escribiéndola o con un clic) nunca se bloquea: solo lo que carga dentro
+        if self.activo and info.resourceType() != QWebEngineUrlRequestInfo.ResourceType.ResourceTypeMainFrame:
+            bloquear = self.bloquea(url.host())
             if bloquear:
                 info.block(True)
         tipo = info.resourceType().name.replace("ResourceType", "")

@@ -5,7 +5,7 @@ import tempfile
 from pathlib import Path
 
 HOME_PRUEBAS = tempfile.mkdtemp(prefix="aurora-tests-")
-os.environ["HOME"] = HOME_PRUEBAS
+os.environ["HOME"] = os.environ["USERPROFILE"] = HOME_PRUEBAS  # Path.home() usa USERPROFILE en Windows
 os.environ["PYTHON_KEYRING_BACKEND"] = "keyring.backends.fail.Keyring"
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 os.environ.setdefault("QTWEBENGINE_CHROMIUM_FLAGS", "--no-sandbox")

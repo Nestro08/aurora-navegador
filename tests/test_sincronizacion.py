@@ -1,5 +1,6 @@
 """Sincronización entre dos «dispositivos» que comparten carpeta."""
 import json
+import time
 from types import SimpleNamespace
 
 import pytest
@@ -21,6 +22,11 @@ def dispositivo(raiz, nombre, nube, frase="frase de prueba"):
     p.sync = Sincronizador(p)
     p.sync.reloj.stop()
     return p
+
+
+def fijar_sal(p):
+    """El dispositivo elige su sal (lo primero que hace al sincronizar con frase de paso)."""
+    p.sync._mezclar(p.sync._leer(p.sync._preparar()), p.sync.dispositivo())
 
 
 @pytest.fixture
@@ -49,9 +55,9 @@ def test_sales_distintas_por_carrera_no_rompen(tmp_path, nube, app, con_llavero)
     a, b = dispositivo(tmp_path, "pc", nube), dispositivo(tmp_path, "portatil", nube)
     carpeta = nube / "Aurora-Sync" / "personal"
     carpeta.mkdir(parents=True)
-    a.sync._mi_sal(carpeta)
+    fijar_sal(a)
     (carpeta / "sal.bin").unlink()  # el otro PC arranca sin ver la sal del primero
-    b.sync._mi_sal(carpeta)
+    fijar_sal(b)
     assert a.sync.estado.datos["sal"] != b.sync.estado.datos["sal"]
     a.claves.guardar_cuenta("https://x.com", "u", "clave-a")
     b.claves.guardar_cuenta("https://y.com", "u", "clave-b")
@@ -121,3 +127,42 @@ def test_no_envia_vacias_las_que_no_se_descifran(tmp_path, nube, app, con_llaver
     a.sync._sincronizar()
     b.sync._sincronizar()
     assert not b.claves.datos["cuentas"]
+
+
+def test_archivo_raro_de_otro_dispositivo_no_rompe_ni_cuela_nada(tmp_path, nube, app, con_llavero):
+    b = dispositivo(tmp_path, "portatil", nube, frase="")
+    carpeta = nube / "Aurora-Sync" / "personal"
+    carpeta.mkdir(parents=True)
+    (carpeta / "malo.json").write_text(json.dumps({
+        "marcadores": [{"titulo": "sin url"}, {"url": "javascript:alert(document.cookie)", "titulo": "trampa"},
+                       {"url": "https://bueno.example/", "titulo": 7, "ts": "ayer"},
+                       {"url": "https://ok.example/", "titulo": "OK", "color": "red;}", "pos": {"x": 9, "y": -1}}],
+        "historial": [{"url": "https://h.example/"}, "texto", {"url": "javascript:x", "fecha": "01/01/2026 10:00"},
+                      {"url": "https://h.example/", "titulo": "H", "fecha": "01/01/2026 10:00"}],
+        "borrados": {"marcadores": "no es un dict"}, "claves": [{"origen": 1}],
+    }), encoding="utf-8")
+    (carpeta / "roto.json").write_text("{esto no es json", encoding="utf-8")
+    b.sync._sincronizar()
+    assert [m["url"] for m in b.marcadores.datos] == ["https://ok.example/"]
+    ok = b.marcadores.datos[0]
+    assert "color" not in ok and ok["pos"] == {"x": 1.0, "y": 0.0}
+    assert [h["url"] for h in b.historial.datos] == ["https://h.example/"]
+
+
+def test_sincronizar_en_segundo_plano(tmp_path, nube, app, con_llavero):
+    a, b = dispositivo(tmp_path, "pc", nube), dispositivo(tmp_path, "portatil", nube)
+    a.marcadores.datos.append({"url": "https://github.com", "titulo": "GitHub", "ts": 1})
+    a.sync._sincronizar()
+    resultados = []
+    b.sync.terminado.connect(lambda ok, mensaje: resultados.append((ok, mensaje)))
+    b.sync.sincronizar()
+    assert b.sync._en_curso
+    b.sync.sincronizar()  # mientras tanto no se lanza otra
+    limite = time.time() + 20
+    while not resultados and time.time() < limite:
+        app.processEvents()
+        time.sleep(0.02)
+    assert resultados and resultados[0][0], resultados
+    assert not b.sync._en_curso
+    assert b.marcadores.datos[0]["url"] == "https://github.com"
+    assert (nube / "Aurora-Sync" / "personal" / "portatil.json").exists()

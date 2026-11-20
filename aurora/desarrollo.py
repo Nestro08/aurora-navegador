@@ -14,6 +14,16 @@ class _Manejador(SimpleHTTPRequestHandler):
     def log_message(self, *args):
         pass
 
+    def parse_request(self):
+        """Solo responde a localhost: una web con «DNS rebinding» no puede leer los archivos de tu proyecto."""
+        if not super().parse_request():
+            return False
+        host = (self.headers.get("Host") or "").rsplit(":", 1)[0].strip("[]").lower()
+        if host not in ("localhost", "127.0.0.1", "::1"):
+            self.send_error(403, "Solo desde localhost")
+            return False
+        return True
+
     def end_headers(self):
         self.send_header("Cache-Control", "no-store")
         super().end_headers()
