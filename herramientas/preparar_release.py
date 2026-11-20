@@ -57,7 +57,8 @@ def main():
     subirlos.append(sumas)
 
     notas = DIST / f"NOTAS-{version}.md"
-    notas.write_text(f"""## Novedades
+    if not notas.exists():  # si ya lo has editado, no se pisa
+        notas.write_text(f"""## Novedades
 
 - (escribe aquí lo nuevo, una línea por cambio empezando con «-»: Aurora enseña las tres primeras en el aviso)
 

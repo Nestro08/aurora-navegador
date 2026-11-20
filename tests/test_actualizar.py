@@ -87,20 +87,19 @@ def test_paquete_de_linux_y_version(tmp_path):
     """El paquete de Linux de la Release trae lo necesario, con los .sh ejecutables."""
     r = subprocess.run([sys.executable, str(RAIZ / "herramientas" / "version.py")], capture_output=True, text=True)
     assert r.stdout.strip() == __version__
-    r = subprocess.run([sys.executable, str(RAIZ / "herramientas" / "empaquetar_linux.py")],
+    # en una carpeta temporal: nunca en dist, donde puede estar el paquete de una Release a medio subir
+    r = subprocess.run([sys.executable, str(RAIZ / "herramientas" / "empaquetar_linux.py"), str(tmp_path / "dist")],
                        capture_output=True, text=True, check=True)
     zip_ruta = Path(r.stdout.strip())
-    try:
-        with zipfile.ZipFile(zip_ruta) as z:
-            nombres = set(z.namelist())
-            assert {"Aurora/instalar-fedora.sh", "Aurora/Aurora.pyw", "Aurora/aurora/app.py", "Aurora/LICENSE",
-                    "Aurora/aurora/actualizar.py"} <= nombres
-            assert not any("__pycache__" in n or "CLAUDE" in n or n.startswith("Aurora/tests") for n in nombres)
-            assert (z.getinfo("Aurora/instalar-fedora.sh").external_attr >> 16) & 0o111
-        carpeta = extraer_seguro(zip_ruta, tmp_path)
-        assert (carpeta / "aurora" / "__init__.py").read_text(encoding="utf-8").count(__version__)
-    finally:
-        zip_ruta.unlink()
+    assert zip_ruta.parent == tmp_path / "dist"
+    with zipfile.ZipFile(zip_ruta) as z:
+        nombres = set(z.namelist())
+        assert {"Aurora/instalar-fedora.sh", "Aurora/Aurora.pyw", "Aurora/aurora/app.py", "Aurora/LICENSE",
+                "Aurora/aurora/actualizar.py"} <= nombres
+        assert not any("__pycache__" in n or "CLAUDE" in n or n.startswith("Aurora/tests") for n in nombres)
+        assert (z.getinfo("Aurora/instalar-fedora.sh").external_attr >> 16) & 0o111
+    carpeta = extraer_seguro(zip_ruta, tmp_path / "fuera")
+    assert (carpeta / "aurora" / "__init__.py").read_text(encoding="utf-8").count(__version__)
 
 
 def test_los_archivos_tienen_la_misma_version():

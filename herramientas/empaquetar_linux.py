@@ -1,5 +1,7 @@
 """Crea dist/Aurora-<versión>-Linux.zip: lo necesario para instalar Aurora con instalar-fedora.sh.
 
+    python herramientas/empaquetar_linux.py [carpeta]   (por defecto, dist; los tests usan una temporal)
+
 Dentro hay una carpeta «Aurora» (unzip Aurora-x.y-Linux.zip && cd Aurora && bash instalar-fedora.sh).
 """
 import sys
@@ -25,8 +27,9 @@ def archivos():
 
 def main():
     version = leer()
-    destino = RAIZ / "dist" / f"Aurora-{version}-Linux.zip"
-    destino.parent.mkdir(exist_ok=True)
+    carpeta = Path(sys.argv[1]) if len(sys.argv) > 1 else RAIZ / "dist"
+    destino = carpeta / f"Aurora-{version}-Linux.zip"
+    destino.parent.mkdir(parents=True, exist_ok=True)
     with zipfile.ZipFile(destino, "w", zipfile.ZIP_DEFLATED) as z:
         for ruta in archivos():
             info = zipfile.ZipInfo.from_file(ruta, "Aurora/" + ruta.relative_to(RAIZ).as_posix())
