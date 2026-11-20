@@ -685,6 +685,12 @@ class Ajustes(QWidget):
                interruptor(a["cookies_terceros"], lambda c: v.set_ajuste("cookies_terceros", c)))
         t.fila("Guardar historial de navegación", "",
                interruptor(a["guardar_historial"], lambda c: v.set_ajuste("guardar_historial", c)))
+        from . import drm
+        w = drm.buscar()
+        t.fila("Contenido protegido (DRM)",
+               f"✓ Activo: Widevine {w['version']}, de {w['navegador']}. Netflix, Spotify, Disney+… pueden reproducirse."
+               if w else "⚠ No disponible: Netflix, Spotify, Disney+… no se reproducirán. Instala Google Chrome (no hace "
+                         "falta usarlo: Aurora aprovecha su módulo Widevine) y reinicia Aurora.")
         l.addWidget(t)
 
         self._sub(l, "Borrar datos de navegación")

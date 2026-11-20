@@ -124,6 +124,7 @@ aurora/
   ajustes.py · estilo.py   pantalla de ajustes y hoja de estilo
   temas.py · tienda_temas.py   temas, sonidos, tienda en línea y editor
   arranque.py           pantalla de bienvenida
+  drm.py                Widevine (Netflix, Spotify…) de un navegador instalado
   importar.py           importar desde Chrome, Brave, Edge…
 herramientas/           icono, versión del .exe y publicar_tienda.py
 tienda/                 temas de la tienda en línea (ver tienda/README.md)
@@ -144,7 +145,10 @@ contraseñas.
 
 ## Límites conocidos
 
-- Netflix, Disney+ y Spotify Web no reproducen contenido: necesitan Widevine (DRM), que QtWebEngine no trae.
+- Netflix, Disney+, Spotify… necesitan Widevine (DRM). Aurora no puede incluirlo (es de Google), pero usa el de
+  un Chrome, Chromium, Edge, Brave o Vivaldi instalado: con Google Chrome instalado funciona sin hacer nada.
+  El estado se ve en *Ajustes → Privacidad y seguridad*. En Windows, Netflix exige además navegadores firmados
+  por Google (VMP), así que ahí probablemente no funcione.
 - Los vídeos H.264/MP4 solo funcionan con el PyQt6 de Fedora y `libavcodec-freeworld` (lo prepara
   `instalar-fedora.sh`). Con el PyQt6 de pip, en Windows incluido, solo se ven WebM, VP9 y AV1.
 - No es compatible con las extensiones de la Chrome Web Store (sí con los userscripts).

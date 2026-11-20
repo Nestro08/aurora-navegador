@@ -5,6 +5,7 @@ from .ventana import *  # noqa: F401,F403
 from . import temas
 from .temas import Apariencia, aplicar_colores, paleta_qt
 from .arranque import PantallaArranque
+from . import drm
 
 SERVIDOR = f"aurora-{getpass.getuser()}"
 
@@ -76,6 +77,7 @@ def main():
             os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] += " " + extra
     except (OSError, ValueError):
         pass
+    drm.activar()  # Widevine (Netflix, Spotify…) del Chrome/Edge/Brave instalado, si lo hay
     if sys.platform == "win32":  # icono propio en la barra de tareas
         try:
             import ctypes
