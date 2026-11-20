@@ -20,7 +20,7 @@ call .venv\Scripts\activate.bat
 python -m pip install --upgrade pip >nul
 pip install -r requirements.txt pyinstaller pillow || goto error
 python herramientas\version.py || goto error
-python herramientas\crear_icono.py || goto error
+if not exist recursos\aurora.ico python herramientas\crear_icono.py || goto error
 pyinstaller --noconfirm --clean Aurora.spec || goto error
 echo.
 echo  Programa listo: dist\Aurora\Aurora.exe
