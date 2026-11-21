@@ -5,7 +5,9 @@
   • Linux (instalado con instalar-fedora.sh): descarga Aurora-x.y-Linux.zip, lo comprueba, lo descomprime y
     ejecuta «instalar-fedora.sh --sin-preguntas»; luego ofrece reiniciar.
   • Desde el código (git, iniciar.bat…): solo avisa y abre la página de la Release.
-Solo se descarga por HTTPS desde GitHub y nada se ejecuta si la huella no coincide.
+Solo se descarga por HTTPS desde GitHub y nada se ejecuta si la huella no coincide. Los archivos se piden por la
+API («releases/assets/<id>»): la dirección normal de descarga la cachea GitHub y, si se sustituye un archivo con el
+mismo nombre, sigue dando el viejo durante un rato.
 """
 import hashlib
 import tempfile
@@ -21,6 +23,7 @@ from . import __version__
 REPO = "Nestro08/aurora-navegador"
 URL_ULTIMA = f"https://api.github.com/repos/{REPO}/releases/latest"
 URL_RELEASES = f"https://github.com/{REPO}/releases"
+URL_ARCHIVOS = f"https://api.github.com/repos/{REPO}/releases/assets/"
 INTERVALO = 20 * 3600  # entre consultas automáticas
 CARPETA_APP = Path.home() / ".local" / "share" / "aurora-app"  # donde instala instalar-fedora.sh
 LANZADOR = Path.home() / ".local" / "bin" / "aurora"
@@ -51,11 +54,15 @@ def como_se_instala():
     return None
 
 
+def de_github(archivo):
+    """True si el archivo de la Release se descarga de este repositorio de GitHub (por su API)."""
+    return isinstance(archivo, dict) and str(archivo.get("url", "")).startswith(URL_ARCHIVOS)
+
+
 def archivo_para(release, modo):
-    """El archivo de la Release para este sistema (dict de GitHub con name y browser_download_url)."""
+    """El archivo de la Release para este sistema (dict de la API de GitHub: name, url…)."""
     for a in release.get("assets") or []:
-        if (isinstance(a, dict) and re.fullmatch(ARCHIVOS[modo], str(a.get("name", "")))
-                and str(a.get("browser_download_url", "")).startswith("https://github.com/")):
+        if de_github(a) and re.fullmatch(ARCHIVOS[modo], str(a.get("name", ""))):
             return a
     return None
 
@@ -103,12 +110,13 @@ class Actualizador(QObject):
         from .temas import Apariencia
         return Apariencia
 
-    def _peticion(self, url):
+    def _peticion(self, url, archivo=False):
+        """archivo=True: el contenido de un archivo de la Release (la API redirige a la descarga)."""
         p = QNetworkRequest(QUrl(url))
         p.setAttribute(QNetworkRequest.Attribute.RedirectPolicyAttribute,
                        QNetworkRequest.RedirectPolicy.NoLessSafeRedirectPolicy)
         p.setRawHeader(b"User-Agent", f"Aurora/{__version__}".encode())
-        p.setRawHeader(b"Accept", b"application/vnd.github+json")
+        p.setRawHeader(b"Accept", b"application/octet-stream" if archivo else b"application/vnd.github+json")
         return p
 
     # ─────────────── buscar
@@ -156,11 +164,11 @@ class Actualizador(QObject):
         modo = como_se_instala()
         archivo = archivo_para(release, modo) if modo else None
         sumas = next((a for a in release.get("assets") or []
-                      if isinstance(a, dict) and a.get("name") == "SHA256SUMS.txt"), None)
+                      if de_github(a) and a.get("name") == "SHA256SUMS.txt"), None)
         if not archivo or not sumas:
             terminado(None, "Esta versión no trae el archivo para tu sistema")
             return
-        r = self.red.get(self._peticion(sumas["browser_download_url"]))
+        r = self.red.get(self._peticion(sumas["url"], archivo=True))
 
         def fin_sumas():
             r.deleteLater()
@@ -178,7 +186,7 @@ class Actualizador(QObject):
         ruta = carpeta / archivo["name"]
         salida = open(ruta, "wb")
         huella = hashlib.sha256()
-        r = self.red.get(self._peticion(archivo["browser_download_url"]))
+        r = self.red.get(self._peticion(archivo["url"], archivo=True))
 
         def leer():
             trozo = bytes(r.readAll())

@@ -15,12 +15,12 @@ RAIZ = Path(__file__).resolve().parent.parent
 
 
 def release(etiqueta, **extra):
-    base = "https://github.com/Nestro08/aurora-navegador/releases/download/" + etiqueta
+    api = "https://api.github.com/repos/Nestro08/aurora-navegador/releases/assets/"
     return {"tag_name": etiqueta, "html_url": f"https://github.com/Nestro08/aurora-navegador/releases/tag/{etiqueta}",
             "body": "## Novedades\n- Permisos de cámara\n- Bloqueador ampliado\n", "draft": False, "prerelease": False,
-            "assets": [{"name": f"Aurora-Setup-{etiqueta[1:]}.exe", "browser_download_url": f"{base}/a.exe"},
-                       {"name": f"Aurora-{etiqueta[1:]}-Linux.zip", "browser_download_url": f"{base}/a.zip"},
-                       {"name": "SHA256SUMS.txt", "browser_download_url": f"{base}/SHA256SUMS.txt"}], **extra}
+            "assets": [{"name": f"Aurora-Setup-{etiqueta[1:]}.exe", "url": api + "1"},
+                       {"name": f"Aurora-{etiqueta[1:]}-Linux.zip", "url": api + "2"},
+                       {"name": "SHA256SUMS.txt", "url": api + "3"}], **extra}
 
 
 def test_compara_versiones_como_numeros():
@@ -33,7 +33,9 @@ def test_elige_el_archivo_de_cada_sistema():
     r = release("v4.1")
     assert archivo_para(r, "windows")["name"] == "Aurora-Setup-4.1.exe"
     assert archivo_para(r, "linux")["name"] == "Aurora-4.1-Linux.zip"
-    r["assets"][0]["browser_download_url"] = "https://otra-web.example/a.exe"  # solo desde GitHub
+    r["assets"][0]["url"] = "https://otra-web.example/a.exe"  # solo desde este repositorio de GitHub
+    assert archivo_para(r, "windows") is None
+    r["assets"][0]["url"] = "https://api.github.com/repos/otro/repo/releases/assets/1"
     assert archivo_para(r, "windows") is None
 
 
