@@ -1,6 +1,6 @@
 # Aurora 4.0
 
-*Por NMM*
+*Por NMM* · **[Web y descargas](https://nestro08.github.io/aurora-navegador/)**
 
 Navegador de escritorio con motor Chromium (QtWebEngine), escrito en Python y PyQt6. Animado, oscuro y con
 herramientas para desarrolladores, un gestor de contraseñas, perfiles, sincronización, extensiones y un
