@@ -5,7 +5,7 @@
 #define Nombre "Aurora"
 ; La versión la pone herramientas/version.py (o el flujo de GitHub con /DVersion=x.y)
 #ifndef Version
-  #define Version "4.0"
+  #define Version "4.0.1"
 #endif
 #define Exe "Aurora.exe"
 
