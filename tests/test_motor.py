@@ -60,3 +60,17 @@ def test_accesos_solo_con_esquemas_seguros():
         assert not url_segura(mala)
     assert es_marcador({"url": "https://a.com", "titulo": "A"})
     assert not es_marcador({"url": "https://a.com", "titulo": 3}) and not es_marcador({"titulo": "x"})
+
+
+def test_identidad_propia_como_edge(app):
+    """Aurora se identifica con su nombre (como Edge o Vivaldi), sin QtWebEngine ni hacerse pasar por otro."""
+    from PyQt6.QtWebEngineCore import QWebEngineProfile
+    from aurora import __version__
+    from aurora.perfiles import identidad
+    perfil = QWebEngineProfile()
+    ua = identidad(perfil)
+    assert "QtWebEngine" not in ua and "Chrome/" in ua and ua.endswith(f"Aurora/{__version__}")
+    assert identidad(perfil).count("Aurora/") == 1  # no se repite si se llama otra vez
+    if hasattr(perfil, "clientHints"):
+        marcas = dict(perfil.clientHints().fullVersionList())
+        assert "Aurora" in marcas and "Chromium" in marcas and "QtWebEngine" not in marcas

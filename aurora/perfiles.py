@@ -7,6 +7,19 @@ from PyQt6.QtNetwork import QNetworkCookie
 from .motor import Bloqueador
 from .permisos import presentar_notificacion
 
+def identidad(perfil_web):
+    """User-Agent y pistas de cliente (Sec-CH-UA) de Aurora: Chromium del motor + «Aurora»."""
+    from . import __version__
+    ua = re.sub(r" QtWebEngine/\S+", "", perfil_web.httpUserAgent())
+    ua = re.sub(r" Aurora/\S+", "", ua) + f" Aurora/{__version__}"
+    if hasattr(perfil_web, "clientHints"):  # Qt 6.8 o más nuevo: la marca también en navigator.userAgentData
+        pistas = perfil_web.clientHints()
+        marcas = {k: v for k, v in dict(pistas.fullVersionList()).items() if k != "QtWebEngine"}
+        marcas["Aurora"] = ".".join((__version__ + ".0.0.0").split(".")[:4])
+        pistas.setFullVersionList(marcas)
+    return ua
+
+
 COLORES_PERFIL = ["#7c5cff", "#22c55e", "#f97316", "#ec4899", "#06b6d4", "#f59e0b", "#ef4444", "#14b8a6"]
 
 
@@ -50,8 +63,10 @@ class Perfil(QObject):
 
     def _configurar_web(self):
         a = self.ajustes.datos
-        # sin «QtWebEngine/x.y»: así las webs (y el inicio de sesión de Google) lo tratan como un Chrome normal
-        self.ua_original = re.sub(r" QtWebEngine/\S+", "", self.web.httpUserAgent())
+        # Identidad propia, como hacen los navegadores basados en Chromium (Edge añade «Edg/…», Vivaldi «Vivaldi/…»):
+        # el token Chrome/… del motor y, al final, «Aurora/x.y». Sin «QtWebEngine/…», que hace que muchas webs traten
+        # a Aurora como una aplicación incrustada y no como un navegador.
+        self.ua_original = identidad(self.web)
         self.web.setHttpUserAgent(self.ua_original)
         if UAS.get(a.get("ua")):
             self.web.setHttpUserAgent(UAS[a["ua"]])
